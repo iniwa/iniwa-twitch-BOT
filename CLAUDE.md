@@ -45,3 +45,7 @@
 - Verification results
 - Blocked checks
 - Design questions for Codex
+
+## Knowledge Persistence
+Durable project workflow decisions belong in AGENTS.md. Surface implementation discoveries that should guide future sessions so Codex can decide whether to record them.
+Detailed design history belongs in `docs/decisions/`. Keep `AGENTS.md` focused on short, durable rules; do not add `Alternatives Considered` as a default Decision Log heading there.

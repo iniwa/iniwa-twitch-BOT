@@ -130,6 +130,10 @@ After Claude Code returns, review:
 - Before meaningful work, check relevant existing docs.
 - Do not silently encode durable design decisions only in code.
 
+## Design Record Scope
+Keep `AGENTS.md` focused on short, durable rules that future Codex and Claude Code sessions must follow.
+
+Do not add `Alternatives Considered` as a default Decision Log heading. When rejected options or longer background matter, summarize only the durable rule in `AGENTS.md` and put the detail under `docs/decisions/`.
 ## Decision Log
 
 ### YYYY-MM-DD: Decision title
