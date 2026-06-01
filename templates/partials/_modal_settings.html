@@ -17,6 +17,25 @@
                 <div style="margin-top:10px; padding:10px; background:rgba(0,184,148,0.1); border:1px solid rgba(0,184,148,0.3); border-radius:4px;">
                     <label style="display:inline-block; font-weight:bold; color:var(--success);"><input type="checkbox" name="enable_vod_download" {% if config.get('enable_vod_download') %}checked{% endif %}> 🎥 配信終了後にアーカイブを自動ダウンロード</label>
                     <div style="margin-top:5px; font-size:0.85em; color:var(--text-secondary);">保存先: <span style="font-family:monospace;">/app/downloads</span> (固定)</div>
+                    {% if config.get('obs_archive', {}).get('enabled') %}
+                    <div style="margin-top:5px; font-size:0.85em; color:#e17055;">⚠️ OBS アーカイブ録画が有効です。自動ダウンロードとの併用は非推奨です。</div>
+                    {% endif %}
+                </div>
+                <div style="margin-top:10px; padding:10px; background:rgba(108,92,231,0.1); border:1px solid rgba(108,92,231,0.3); border-radius:4px;">
+                    <label style="display:inline-block; font-weight:bold; color:#a29bfe;"><input type="checkbox" name="obs_archive_enabled" {% if config.get('obs_archive', {}).get('enabled') %}checked{% endif %}> 📹 OBS アーカイブ録画連携 (secretary-bot)</label>
+                    <div style="margin-top:5px; font-size:0.85em; color:var(--text-secondary);">配信開始・終了時に secretary-bot 経由で OBS 録画を自動制御します。自動ダウンロードとの併用は非推奨。</div>
+                    <div style="margin-top:8px;">
+                        <label style="font-size:0.9em;">Secretary-Bot URL</label>
+                        <input type="text" name="obs_archive_url" value="{{ config.get('obs_archive', {}).get('secretary_bot_url', '') }}" placeholder="http://192.168.1.x:8080" style="margin-top:3px;">
+                    </div>
+                    <div style="margin-top:5px;">
+                        <label style="font-size:0.9em;">トークン (任意)</label>
+                        <input type="password" name="obs_archive_token" value="{{ config.get('obs_archive', {}).get('token', '') }}" placeholder="X-Bot-Token" style="margin-top:3px;">
+                    </div>
+                    <div style="margin-top:5px;">
+                        <label style="font-size:0.9em;">タイムアウト (秒)</label>
+                        <input type="number" name="obs_archive_timeout" value="{{ config.get('obs_archive', {}).get('timeout', 10) }}" min="1" max="60" style="margin-top:3px; width:80px;">
+                    </div>
                 </div>
                 <div style="margin-top:10px;">
                     <label style="color:var(--text-secondary);">🚫 非表示ユーザーリスト</label>

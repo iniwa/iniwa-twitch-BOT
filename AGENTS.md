@@ -136,6 +136,27 @@ Keep `AGENTS.md` focused on short, durable rules that future Codex and Claude Co
 Do not add `Alternatives Considered` as a default Decision Log heading. When rejected options or longer background matter, summarize only the durable rule in `AGENTS.md` and put the detail under `docs/decisions/`.
 ## Decision Log
 
+### 2026-06-01: Twitch detects streams, secretary-bot owns OBS archive recording
+
+Context:
+- Local streaming now records with OBS in parallel, so Twitch VOD download is no longer the normal archive source.
+
+Decision:
+- `iniwa-twitch-bot` detects Twitch start/end and notifies `secretary-bot`; `secretary-bot` and Windows Agent control OBS recording and archive media.
+- Detailed implementation decisions live in `docs/decisions/2026-06-01-twitch-obs-archive-recording.md`.
+
+Reason:
+- This project already owns Twitch stream state, while `secretary-bot` owns OBS Recording Library, Windows Agent delegation, encode, preview, and retention.
+
+Constraints Introduced:
+- On Twitch stream end, request OBS recording stop if OBS is recording, even if it was already recording before the integration event.
+- Keep Twitch VOD download as administrator/fallback functionality; do not remove it.
+- Do not add direct OBS WebSocket or recording file move ownership to this project.
+
+Do Not Change Casually:
+- Do not make Twitch VOD download the default local archive path again without a new design review.
+- Do not bypass `secretary-bot` for OBS archive recording management.
+
 ### YYYY-MM-DD: Decision title
 
 Context:

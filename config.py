@@ -50,7 +50,13 @@ DEFAULT_CONFIG = {
     'bot_user_id': '', 'channel_name': '',
     'is_running': False, 'rules': [], 'presets': [],
     'prediction_presets': [],
-    'layout': DEFAULT_LAYOUT
+    'layout': DEFAULT_LAYOUT,
+    'obs_archive': {
+        'enabled': False,
+        'secretary_bot_url': '',   # 例: http://192.168.1.x:8080
+        'token': '',               # X-Bot-Token ヘッダー（任意）
+        'timeout': 10,
+    },
 }
 
 

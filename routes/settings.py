@@ -36,6 +36,15 @@ def save_config_route():
         if x.strip()
     ]
 
+    obs_archive = conf.setdefault('obs_archive', {})
+    obs_archive['enabled'] = 'obs_archive_enabled' in request.form
+    obs_archive['secretary_bot_url'] = request.form.get('obs_archive_url', '').strip()
+    obs_archive['token'] = request.form.get('obs_archive_token', '').strip()
+    try:
+        obs_archive['timeout'] = int(request.form.get('obs_archive_timeout', '10').strip() or '10')
+    except (ValueError, TypeError):
+        obs_archive['timeout'] = 10
+
     c.save_config(conf)
     return redirect(url_for('dashboard.index'))
 

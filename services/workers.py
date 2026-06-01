@@ -15,6 +15,7 @@ from services.storage import (
 )
 from services.download import auto_download_task, YT_DLP_AVAILABLE
 from services.irc import irc_worker
+from services.obs_notifier import notify_stream_start, notify_stream_end
 
 EMPTY_MINUTE_STATS = {
     'messages': [], 'emote_counts': {},
@@ -142,8 +143,8 @@ def _handle_stream_end(conf, finished_id):
     c.log('[END] 配信終了検知')
 
     idx = load_stream_index()
+    entry = idx.get(finished_id, {}) if idx else {}
     if finished_id in idx:
-        entry = idx[finished_id]
         st_str = entry.get('start_time')
         if st_str:
             start_dt = c.parse_iso_jst(st_str)
@@ -158,6 +159,21 @@ def _handle_stream_end(conf, finished_id):
                     c.log(f'[WARN] 時間計算エラー: {e}')
             else:
                 c.log('[WARN] 時間計算エラー: start_time の解析に失敗')
+
+    # secretary-bot に配信終了を通知（OBS 録画停止を依頼）
+    ended_at = c.get_now().isoformat()
+    stream_data_for_notify = {
+        'id': finished_id,
+        'title': entry.get('title'),
+        'game_name': entry.get('game_name'),
+        'started_at': entry.get('start_time'),
+    }
+    threading.Thread(
+        target=notify_stream_end,
+        kwargs={'conf': conf, 'stream_data': stream_data_for_notify,
+                'ended_at': ended_at, 'log_fn': c.log},
+        daemon=True,
+    ).start()
 
     if conf.get('enable_vod_download'):
         threading.Thread(
@@ -300,6 +316,13 @@ def viewer_worker_loop(conf):
                 c.current_session_viewers.clear()
                 c.state.reset()
                 c.log(f'[START] 配信開始検知: {stream_data.get("title")} ({c.current_game})')
+
+                # secretary-bot に配信開始を通知（OBS 録画開始を依頼）
+                threading.Thread(
+                    target=notify_stream_start,
+                    kwargs={'conf': conf, 'stream_data': stream_data, 'log_fn': c.log},
+                    daemon=True,
+                ).start()
 
                 idx = load_stream_index()
                 if stream_id not in idx:
