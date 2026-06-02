@@ -169,6 +169,7 @@
                     <button id="vod-migr-run-btn" class="btn" style="font-size:0.85em; display:none;">▶ 選択項目を移行</button>
                     <span id="vod-migr-status" style="font-size:0.85em; color:var(--text-secondary); align-self:center;"></span>
                 </div>
+                <div id="vod-migr-skipped" style="display:none; margin-bottom:12px; font-size:0.85em; color:var(--text-secondary);"></div>
                 <div id="vod-migr-result" style="display:none; overflow-x:auto;">
                     <table id="vod-migr-table">
                         <thead>
@@ -414,14 +415,61 @@ function _fmt_mb(bytes) {
     return (bytes / 1048576).toFixed(0) + ' MB';
 }
 
+function _vodMigrSkipLabel(reason) {
+    var labels = {
+        already_in_obs_archive: 'OBSアーカイブに登録済み',
+        file_missing: 'ファイルが見つからない',
+        no_file_path: '保存先パスなし'
+    };
+    return labels[reason] || reason || '不明';
+}
+
+function _escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, function(ch) {
+        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
+    });
+}
+
+function _renderVodMigrSkipped(skipped) {
+    var el = document.getElementById('vod-migr-skipped');
+    if (!el) return;
+    if (!skipped || skipped.length === 0) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+    }
+
+    var counts = {};
+    skipped.forEach(function(item) {
+        var reason = item.reason || 'unknown';
+        counts[reason] = (counts[reason] || 0) + 1;
+    });
+
+    var summary = Object.keys(counts).map(function(reason) {
+        return _vodMigrSkipLabel(reason) + ': ' + counts[reason] + '件';
+    }).join(' / ');
+
+    var details = skipped.slice(0, 30).map(function(item) {
+        var extra = item.file_path ? ' - ' + _escapeHtml(item.file_path) : '';
+        if (item.obs_archive_status) extra += ' (' + _escapeHtml(item.obs_archive_status) + ')';
+        return '<li><code>' + _escapeHtml(item.stream_id || '-') + '</code>: ' + _escapeHtml(_vodMigrSkipLabel(item.reason)) + extra + '</li>';
+    }).join('');
+
+    var more = skipped.length > 30 ? '<div style="margin-top:4px;">ほか ' + (skipped.length - 30) + '件</div>' : '';
+    el.innerHTML = '<details><summary>スキップ理由: ' + summary + '</summary><ul style="margin:6px 0 0 18px;">' + details + '</ul>' + more + '</details>';
+    el.style.display = '';
+}
+
 function vodMigrScan() {
     var statusEl = document.getElementById('vod-migr-status');
     var resultEl = document.getElementById('vod-migr-result');
     var tbody = document.getElementById('vod-migr-tbody');
     var runBtn = document.getElementById('vod-migr-run-btn');
+    var skippedEl = document.getElementById('vod-migr-skipped');
     if (statusEl) statusEl.textContent = 'スキャン中...';
     if (resultEl) resultEl.style.display = 'none';
     if (runBtn) runBtn.style.display = 'none';
+    if (skippedEl) skippedEl.style.display = 'none';
     fetch('/api/obs_archive/vod_migration/scan')
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -431,6 +479,7 @@ function vodMigrScan() {
             }
             var cands = d.candidates || [];
             if (statusEl) statusEl.textContent = '候補: ' + cands.length + '件 / スキップ: ' + (d.skipped || []).length + '件';
+            _renderVodMigrSkipped(d.skipped || []);
             if (tbody) {
                 tbody.innerHTML = '';
                 cands.forEach(function(item) {
