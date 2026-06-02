@@ -79,17 +79,41 @@
                             </td>
                             <td>{{ data.avg_viewers }} / {{ data.max_viewers }}</td>
                             <td id="progress-{{ sid }}" class="nowrap">
-                                {% if data.vod_status == 'downloaded' %}
-                                    {% if data.encode_status == 'encoded' %}
-                                        <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
-                                    {% elif data.encode_status == 'missing' %}
-                                        <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
+                                {% if obs_archive_enabled %}
+                                    {% set oas = data.get('obs_archive_status', '') %}
+                                    {% if oas == 'recording' %}
+                                        <span style="color:#e17055;">🔴 録画中</span>
+                                    {% elif oas == 'incoming' %}
+                                        <span style="color:#7eb8f7;">🕐 エンコード待ち</span>
+                                    {% elif oas == 'encoded' %}
+                                        <span class="status-dl">✅ 保存済</span>
+                                    {% elif oas == 'preview_ready' %}
+                                        <span class="status-dl">✅ 保存済 / プレビュー可</span>
+                                    {% elif oas == 'not_recorded' %}
+                                        <span style="color:var(--text-secondary);">- 未保存</span>
+                                    {% elif oas == 'unknown' %}
+                                        <span style="color:var(--warning);" title="{{ data.get('obs_archive_error', '') }}">⚠️ 確認不可</span>
                                     {% else %}
-                                        <span style="color:#7eb8f7;" title="エンコード待ち ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">🕐 エンコード待ち</span>
+                                        <span style="color:var(--text-secondary);">-</span>
                                     {% endif %}
-                                {% elif data.vod_status == 'downloading' %}<div class="status-wait">⏳ DL中...</div>
-                                {% elif data.vod_status == 'failed' %}<span class="status-fail">❌ 失敗</span>
-                                {% else %}<span style="color:var(--text-secondary);">- 未保存</span>{% endif %}
+                                    <button type="button"
+                                        class="btn obs-archive-refresh-btn"
+                                        style="font-size:0.72em; padding:2px 5px; margin-left:3px; opacity:0.7;"
+                                        data-sid="{{ sid }}"
+                                        title="OBSアーカイブ状態を再確認">↻</button>
+                                {% else %}
+                                    {% if data.vod_status == 'downloaded' %}
+                                        {% if data.encode_status == 'encoded' %}
+                                            <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
+                                        {% elif data.encode_status == 'missing' %}
+                                            <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
+                                        {% else %}
+                                            <span style="color:#7eb8f7;" title="エンコード待ち ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">🕐 エンコード待ち</span>
+                                        {% endif %}
+                                    {% elif data.vod_status == 'downloading' %}<div class="status-wait">⏳ DL中...</div>
+                                    {% elif data.vod_status == 'failed' %}<span class="status-fail">❌ 失敗</span>
+                                    {% else %}<span style="color:var(--text-secondary);">- 未保存</span>{% endif %}
+                                {% endif %}
                             </td>
                             <td class="nowrap">
                                 <button class="btn btn-edit btn-edit-stream"
@@ -294,6 +318,41 @@ document.addEventListener('click', function(e) {
     var btn = e.target.closest('.btn-edit-stream');
     if (btn) {
         openEditStreamModal(btn.dataset.sid, btn.dataset.title, btn.dataset.game);
+    }
+
+    var rbtn = e.target.closest('.obs-archive-refresh-btn');
+    if (rbtn) {
+        var sid = rbtn.dataset.sid;
+        var cell = document.getElementById('progress-' + sid);
+        if (cell) {
+            rbtn.textContent = '⏳';
+            rbtn.disabled = true;
+        }
+        fetch('/api/obs_archive/status/' + sid + '/refresh', {method: 'POST'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var labels = {
+                    recording: '🔴 録画中',
+                    incoming: '🕐 エンコード待ち',
+                    encoded: '✅ 保存済',
+                    preview_ready: '✅ 保存済 / プレビュー可',
+                    not_recorded: '- 未保存',
+                    unknown: '⚠️ 確認不可'
+                };
+                var status = d.status || 'unknown';
+                var label = labels[status] || ('- ' + status);
+                if (cell) {
+                    var span = cell.querySelector('span');
+                    if (span) { span.textContent = label; }
+                }
+                if (rbtn) {
+                    rbtn.textContent = '↻';
+                    rbtn.disabled = false;
+                }
+            })
+            .catch(function() {
+                if (rbtn) { rbtn.textContent = '↻'; rbtn.disabled = false; }
+            });
     }
 });
 </script>

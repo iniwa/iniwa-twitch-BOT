@@ -1,10 +1,11 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, jsonify
 from datetime import datetime
 import json
 import os
 import re
 import config as c
 from services.storage import ARCHIVE_WAIT_DIR, ARCHIVE_ENCODE_DIR
+from services.obs_archive_status import refresh_archive_status
 
 bp = Blueprint('analytics', __name__)
 
@@ -12,6 +13,15 @@ bp = Blueprint('analytics', __name__)
 def _validate_stream_id(stream_id):
     """stream_id がパストラバーサルを含まない安全な値か検証"""
     return bool(stream_id and re.match(r'^[a-zA-Z0-9_-]+$', stream_id))
+
+
+@bp.route('/api/obs_archive/status/<stream_id>/refresh', methods=['POST'])
+def obs_archive_status_refresh(stream_id):
+    if not _validate_stream_id(stream_id):
+        return jsonify({"ok": False, "error": "invalid stream_id"}), 400
+    conf = c.load_config()
+    result = refresh_archive_status(conf, stream_id, log_fn=c.log)
+    return jsonify(result)
 
 
 @bp.route('/analytics')

@@ -16,6 +16,7 @@ from services.storage import (
 from services.download import auto_download_task, YT_DLP_AVAILABLE
 from services.irc import irc_worker
 from services.obs_notifier import notify_stream_start, notify_stream_end
+from services.obs_archive_status import poll_archive_status_after_stream_end
 
 EMPTY_MINUTE_STATS = {
     'messages': [], 'emote_counts': {},
@@ -174,6 +175,14 @@ def _handle_stream_end(conf, finished_id):
                 'ended_at': ended_at, 'log_fn': c.log},
         daemon=True,
     ).start()
+
+    if conf.get('obs_archive', {}).get('enabled'):
+        threading.Thread(
+            target=poll_archive_status_after_stream_end,
+            kwargs={'conf': conf, 'stream_id': finished_id, 'log_fn': c.log,
+                    'attempts': 12, 'interval_sec': 30},
+            daemon=True,
+        ).start()
 
     if conf.get('enable_vod_download'):
         threading.Thread(
@@ -336,7 +345,9 @@ def viewer_worker_loop(conf):
                             '{width}', '%{width}'
                         ).replace('{height}', '%{height}')
                     }
-                    save_stream_index(idx)
+                if conf.get('obs_archive', {}).get('enabled'):
+                    idx[stream_id]['obs_archive_status'] = 'recording'
+                save_stream_index(idx)
             else:
                 c.current_game = stream_data.get('game_name')
 
