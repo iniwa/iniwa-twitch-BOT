@@ -89,12 +89,25 @@
                                         <span class="status-dl">✅ 保存済</span>
                                     {% elif oas == 'preview_ready' %}
                                         <span class="status-dl">✅ 保存済 / プレビュー可</span>
-                                    {% elif oas == 'not_recorded' %}
-                                        <span style="color:var(--text-secondary);">- 未保存</span>
                                     {% elif oas == 'unknown' %}
                                         <span style="color:var(--warning);" title="{{ data.get('obs_archive_error', '') }}">⚠️ 確認不可</span>
                                     {% else %}
-                                        <span style="color:var(--text-secondary);">-</span>
+                                        {# not_recorded / 未設定 → レガシーVOD状態にフォールバック #}
+                                        {% if data.vod_status == 'downloaded' %}
+                                            {% if data.encode_status == 'encoded' %}
+                                                <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
+                                            {% elif data.encode_status == 'missing' %}
+                                                <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
+                                            {% else %}
+                                                <span style="color:#7eb8f7;" title="{{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB">🕐 VOD保存済 / 移行待ち</span>
+                                            {% endif %}
+                                        {% elif data.vod_status == 'downloading' %}
+                                            <div class="status-wait">⏳ DL中...</div>
+                                        {% elif data.vod_status == 'failed' %}
+                                            <span class="status-fail">❌ 失敗</span>
+                                        {% else %}
+                                            <span style="color:var(--text-secondary);">- 未保存</span>
+                                        {% endif %}
                                     {% endif %}
                                     <button type="button"
                                         class="btn obs-archive-refresh-btn"
