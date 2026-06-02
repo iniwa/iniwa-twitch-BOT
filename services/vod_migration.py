@@ -9,7 +9,12 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from services.storage import ARCHIVE_WAIT_DIR, load_stream_index, save_stream_index
+from services.storage import (
+    ARCHIVE_ENCODE_DIR,
+    ARCHIVE_WAIT_DIR,
+    load_stream_index,
+    save_stream_index,
+)
 
 _ALREADY_MIGRATED_STATUSES = {"incoming", "encoded", "preview_ready"}
 _JST = timezone(timedelta(hours=9))
@@ -25,7 +30,7 @@ def _headers(cfg: dict) -> dict:
 
 
 def _resolve_source_path(file_path: str) -> tuple[str | None, list[str]]:
-    """Return an existing VOD path, including legacy /app/downloads fallback."""
+    """Return an existing VOD path, including legacy wait/encode fallbacks."""
     checked = []
     if file_path:
         checked.append(file_path)
@@ -34,11 +39,12 @@ def _resolve_source_path(file_path: str) -> tuple[str | None, list[str]]:
 
     filename = os.path.basename(file_path or "")
     if filename:
-        wait_path = os.path.join(ARCHIVE_WAIT_DIR, filename)
-        if wait_path not in checked:
-            checked.append(wait_path)
-        if os.path.exists(wait_path):
-            return wait_path, checked
+        for directory in (ARCHIVE_WAIT_DIR, ARCHIVE_ENCODE_DIR):
+            candidate = os.path.join(directory, filename)
+            if candidate not in checked:
+                checked.append(candidate)
+            if os.path.exists(candidate):
+                return candidate, checked
 
     return None, checked
 
