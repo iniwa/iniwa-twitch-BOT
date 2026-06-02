@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, request
 from datetime import datetime
 import json
 import os
@@ -6,6 +6,7 @@ import re
 import config as c
 from services.storage import ARCHIVE_WAIT_DIR, ARCHIVE_ENCODE_DIR
 from services.obs_archive_status import refresh_archive_status
+from services.vod_migration import scan_migration_candidates, run_migration_item
 
 bp = Blueprint('analytics', __name__)
 
@@ -13,6 +14,71 @@ bp = Blueprint('analytics', __name__)
 def _validate_stream_id(stream_id):
     """stream_id がパストラバーサルを含まない安全な値か検証"""
     return bool(stream_id and re.match(r'^[a-zA-Z0-9_-]+$', stream_id))
+
+
+@bp.route('/api/obs_archive/vod_migration/scan')
+def obs_vod_migration_scan():
+    """VOD 移行候補を返す（読み取り専用、admin 不要）。"""
+    conf = c.load_config()
+    result = scan_migration_candidates(conf)
+    return jsonify(result)
+
+
+@bp.route('/api/obs_archive/vod_migration/run', methods=['POST'])
+def obs_vod_migration_run():
+    """選択された stream_ids を逐次 secretary-bot 経由で移行する（admin 必須）。"""
+    if not c.is_admin_mode():
+        return jsonify({"ok": False, "error": "admin mode required"}), 403
+
+    body = request.get_json(silent=True) or {}
+    stream_ids = body.get("stream_ids")
+    if not stream_ids or not isinstance(stream_ids, list) or len(stream_ids) == 0:
+        return jsonify({"ok": False, "error": "stream_ids is required and must be a non-empty list"}), 400
+
+    conf = c.load_config()
+    scan_result = scan_migration_candidates(conf)
+    if not scan_result.get("ok"):
+        return jsonify({"ok": False, "error": scan_result.get("error", "scan failed")}), 503
+
+    candidates_by_id = {item["stream_id"]: item for item in scan_result.get("candidates", [])}
+
+    results = []
+    for sid in stream_ids:
+        if not _validate_stream_id(sid):
+            results.append({"stream_id": sid, "status": "failed", "error": "invalid stream_id"})
+            continue
+        item = candidates_by_id.get(sid)
+        if item is None:
+            results.append({"stream_id": sid, "status": "skipped", "reason": "not_a_candidate"})
+            continue
+        try:
+            res = run_migration_item(
+                conf,
+                stream_id=sid,
+                source_filename=item["source_filename"],
+                title=item.get("title", ""),
+                game_name=item.get("game_name", ""),
+                start_time=item.get("start_time"),
+                log_fn=c.log,
+            )
+            if res.get("skipped"):
+                status = "skipped"
+            elif res.get("ok"):
+                status = "ingested"
+            else:
+                status = "failed"
+            results.append({
+                "stream_id": sid,
+                "status": status,
+                "target_filename": res.get("target_filename", ""),
+                "reason": res.get("reason"),
+                "error": res.get("error"),
+                "warnings": res.get("warnings", []),
+            })
+        except Exception as e:
+            results.append({"stream_id": sid, "status": "failed", "error": str(e)})
+
+    return jsonify({"ok": True, "results": results})
 
 
 @bp.route('/api/obs_archive/status/<stream_id>/refresh', methods=['POST'])

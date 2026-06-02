@@ -144,6 +144,36 @@
                 </div>
                 {% else %}<div style="text-align:center; padding:20px; color:var(--text-secondary);">まだ記録された配信データがありません</div>{% endif %}
             </div>
+
+            {% if obs_archive_enabled and admin_mode %}
+            <div class="card" id="vod-migration-card" style="margin-top:16px;">
+                <h2 style="display:flex; align-items:center; gap:8px;">
+                    📦 VOD移行ツール
+                    <span style="font-size:0.75em; font-weight:normal; color:var(--text-secondary);">ダウンロード済みVODをOBSアーカイブに取り込む（管理者モード）</span>
+                </h2>
+                <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <button id="vod-migr-scan-btn" class="btn btn-primary" style="font-size:0.85em;">🔍 スキャン</button>
+                    <button id="vod-migr-run-btn" class="btn" style="font-size:0.85em; display:none;">▶ 選択項目を移行</button>
+                    <span id="vod-migr-status" style="font-size:0.85em; color:var(--text-secondary); align-self:center;"></span>
+                </div>
+                <div id="vod-migr-result" style="display:none; overflow-x:auto;">
+                    <table id="vod-migr-table">
+                        <thead>
+                            <tr>
+                                <th style="width:32px;"><input type="checkbox" id="vod-migr-check-all" title="全て選択"></th>
+                                <th>日時</th>
+                                <th>タイトル</th>
+                                <th>ゲーム</th>
+                                <th>ファイル名</th>
+                                <th>サイズ</th>
+                                <th>状態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vod-migr-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         <div id="calendar" class="tab-content">
@@ -320,6 +350,16 @@ document.addEventListener('click', function(e) {
         openEditStreamModal(btn.dataset.sid, btn.dataset.title, btn.dataset.game);
     }
 
+    var mbtn = e.target.closest('#vod-migr-scan-btn');
+    if (mbtn) { vodMigrScan(); return; }
+    var rbtn2 = e.target.closest('#vod-migr-run-btn');
+    if (rbtn2) { vodMigrRun(); return; }
+    var chkAll = e.target.closest('#vod-migr-check-all');
+    if (chkAll) {
+        document.querySelectorAll('.vod-migr-row-check').forEach(function(cb) { cb.checked = chkAll.checked; });
+        return;
+    }
+
     var rbtn = e.target.closest('.obs-archive-refresh-btn');
     if (rbtn) {
         var sid = rbtn.dataset.sid;
@@ -355,5 +395,100 @@ document.addEventListener('click', function(e) {
             });
     }
 });
+
+function _fmt_mb(bytes) {
+    if (!bytes) return '-';
+    return (bytes / 1048576).toFixed(0) + ' MB';
+}
+
+function vodMigrScan() {
+    var statusEl = document.getElementById('vod-migr-status');
+    var resultEl = document.getElementById('vod-migr-result');
+    var tbody = document.getElementById('vod-migr-tbody');
+    var runBtn = document.getElementById('vod-migr-run-btn');
+    if (statusEl) statusEl.textContent = 'スキャン中...';
+    if (resultEl) resultEl.style.display = 'none';
+    if (runBtn) runBtn.style.display = 'none';
+    fetch('/api/obs_archive/vod_migration/scan')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.ok) {
+                if (statusEl) statusEl.textContent = 'エラー: ' + (d.error || '不明');
+                return;
+            }
+            var cands = d.candidates || [];
+            if (statusEl) statusEl.textContent = '候補: ' + cands.length + '件 / スキップ: ' + (d.skipped || []).length + '件';
+            if (tbody) {
+                tbody.innerHTML = '';
+                cands.forEach(function(item) {
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td><input type="checkbox" class="vod-migr-row-check" data-sid="' + item.stream_id + '" data-filename="' + (item.source_filename || '') + '" checked></td>'
+                        + '<td>' + (item.start_time ? item.start_time.slice(0,10) : '-') + '</td>'
+                        + '<td>' + (item.title || '').substring(0, 40) + '</td>'
+                        + '<td>' + (item.game_name || '') + '</td>'
+                        + '<td style="font-size:0.8em;">' + (item.source_filename || '') + '</td>'
+                        + '<td>' + _fmt_mb(item.file_size) + '</td>'
+                        + '<td id="vod-migr-rowstate-' + item.stream_id + '" style="color:var(--text-secondary);">待機</td>';
+                    tbody.appendChild(tr);
+                });
+            }
+            if (resultEl) resultEl.style.display = cands.length > 0 ? '' : 'none';
+            if (runBtn) runBtn.style.display = cands.length > 0 ? '' : 'none';
+        })
+        .catch(function(err) {
+            if (statusEl) statusEl.textContent = '通信エラー: ' + err;
+        });
+}
+
+function vodMigrRun() {
+    var statusEl = document.getElementById('vod-migr-status');
+    var runBtn = document.getElementById('vod-migr-run-btn');
+    var checks = document.querySelectorAll('.vod-migr-row-check:checked');
+    var sids = [];
+    checks.forEach(function(cb) { sids.push(cb.dataset.sid); });
+    if (sids.length === 0) {
+        if (statusEl) statusEl.textContent = '移行する項目を選択してください';
+        return;
+    }
+    if (!confirm(sids.length + '件を移行します。よろしいですか？')) return;
+    if (runBtn) runBtn.disabled = true;
+    if (statusEl) statusEl.textContent = '移行中... (0/' + sids.length + ')';
+
+    var done = 0;
+    function runNext(idx) {
+        if (idx >= sids.length) {
+            if (statusEl) statusEl.textContent = '完了: ' + done + '/' + sids.length + '件';
+            if (runBtn) runBtn.disabled = false;
+            return;
+        }
+        var sid = sids[idx];
+        var rowState = document.getElementById('vod-migr-rowstate-' + sid);
+        if (rowState) rowState.textContent = '⏳ 移行中...';
+        fetch('/api/obs_archive/vod_migration/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({stream_ids: [sid]})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var res = (d.results || [])[0] || {};
+            var state = res.status || (d.ok ? 'ingested' : 'failed');
+            var labels = {ingested: '✅ 取り込み済', skipped: '⏭ スキップ', failed: '❌ 失敗'};
+            var label = labels[state] || state;
+            if (res.error) label += ': ' + res.error;
+            else if (res.reason) label += ' (' + res.reason + ')';
+            if (rowState) rowState.textContent = label;
+            if (state === 'ingested' || state === 'skipped') done++;
+            if (statusEl) statusEl.textContent = '移行中... (' + (idx+1) + '/' + sids.length + ')';
+            runNext(idx + 1);
+        })
+        .catch(function(err) {
+            if (rowState) rowState.textContent = '❌ 通信エラー';
+            if (statusEl) statusEl.textContent = '移行中... (' + (idx+1) + '/' + sids.length + ')';
+            runNext(idx + 1);
+        });
+    }
+    runNext(0);
+}
 </script>
 {% endblock %}
