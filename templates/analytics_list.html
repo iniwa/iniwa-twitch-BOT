@@ -21,9 +21,11 @@
                 <form action="/force_sync_history" method="post" onsubmit="return confirm('Twitch APIから最新情報を取得し、タイトルや時間を更新します。\n(ゲーム名は現在の設定を維持します)\nよろしいですか？');">
                     <button class="btn btn-primary" style="font-size:0.85em;">🔄 API更新</button>
                 </form>
+                {% if not (obs_archive_enabled and not admin_mode) %}
                 <form action="/download_all_vods" method="post" onsubmit="return confirm('未保存のアーカイブを全てダウンロードしますか？時間がかかります。');">
                     <button class="btn btn-bulk" style="font-size:0.85em;">📥 一括ダウンロード</button>
                 </form>
+                {% endif %}
             </div>
         </div>
 
@@ -95,6 +97,7 @@
                                     data-title="{{ data.title|replace('"', '&quot;') }}"
                                     data-game="{{ data.game_name|replace('"', '&quot;') }}">✏️</button>
 
+                                {% if not (obs_archive_enabled and not admin_mode) %}
                                 {% if data.vod_status == 'downloading' %}
                                     <form action="/cancel_download/{{ sid }}" method="post" style="display:inline;">
                                         <button class="btn btn-stop" onclick="return confirm('ダウンロードを中止しますか？')">🛑</button>
@@ -107,6 +110,7 @@
                                     <form action="/download_vod/{{ sid }}" method="post" style="display:inline;">
                                         <button class="btn btn-dl">📥</button>
                                     </form>
+                                {% endif %}
                                 {% endif %}
                             </td>
                         </tr>

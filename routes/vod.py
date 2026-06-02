@@ -16,6 +16,14 @@ def _validate_stream_id(stream_id):
     return bool(stream_id and re.match(r'^[a-zA-Z0-9_-]+$', stream_id))
 
 
+def _vod_admin_required() -> bool:
+    """OBS archive 有効時は admin_mode が必要。True = 許可。"""
+    conf = c.load_config()
+    if not conf.get('obs_archive', {}).get('enabled'):
+        return True
+    return c.is_admin_mode()
+
+
 @bp.route('/api/download_progress')
 def api_download_progress():
     return jsonify(get_download_progress())
@@ -25,6 +33,9 @@ def api_download_progress():
 def download_vod_manual(stream_id):
     if not _validate_stream_id(stream_id):
         return redirect(url_for('analytics.analytics_list'))
+    if not _vod_admin_required():
+        c.log("[VOD] ブロック: OBS archive 有効時は管理者モードが必要です")
+        return redirect(url_for('analytics.analytics_list'))
     conf = c.load_config()
     threading.Thread(target=execute_download, args=(conf, stream_id)).start()
     return redirect(url_for('analytics.analytics_list'))
@@ -32,6 +43,9 @@ def download_vod_manual(stream_id):
 
 @bp.route('/download_all_vods', methods=['POST'])
 def download_all_vods():
+    if not _vod_admin_required():
+        c.log("[VOD] ブロック: OBS archive 有効時は管理者モードが必要です")
+        return redirect(url_for('analytics.analytics_list'))
     conf = c.load_config()
     threading.Thread(target=bulk_download_task, args=(conf,)).start()
     return redirect(url_for('analytics.analytics_list'))
@@ -41,6 +55,9 @@ def download_all_vods():
 def cancel_download(stream_id):
     if not _validate_stream_id(stream_id):
         return redirect(url_for('analytics.analytics_list'))
+    if not _vod_admin_required():
+        c.log("[VOD] ブロック: OBS archive 有効時は管理者モードが必要です")
+        return redirect(url_for('analytics.analytics_list'))
     request_cancel_download(stream_id)
     return redirect(url_for('analytics.analytics_list'))
 
@@ -48,6 +65,9 @@ def cancel_download(stream_id):
 @bp.route('/delete_vod/<stream_id>', methods=['POST'])
 def delete_vod(stream_id):
     if not _validate_stream_id(stream_id):
+        return redirect(url_for('analytics.analytics_list'))
+    if not _vod_admin_required():
+        c.log("[VOD] ブロック: OBS archive 有効時は管理者モードが必要です")
         return redirect(url_for('analytics.analytics_list'))
     delete_vod_file(stream_id)
     return redirect(url_for('analytics.analytics_list'))

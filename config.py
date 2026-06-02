@@ -28,6 +28,22 @@ current_game = None
 file_lock = threading.RLock()
 download_lock = threading.Lock()
 
+# 管理者モード（インメモリのみ・再起動でリセット）
+_admin_lock = threading.Lock()
+_admin_mode: bool = False
+
+
+def is_admin_mode() -> bool:
+    with _admin_lock:
+        return _admin_mode
+
+
+def toggle_admin_mode() -> bool:
+    global _admin_mode
+    with _admin_lock:
+        _admin_mode = not _admin_mode
+        return _admin_mode
+
 # ダウンロード状態 (download_lock で保護)
 download_progress = {}
 cancel_requests = set()

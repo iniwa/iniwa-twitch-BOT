@@ -15,6 +15,13 @@ def toggle():
     return redirect(url_for('dashboard.index'))
 
 
+@bp.route('/toggle_admin_mode', methods=['POST'])
+def toggle_admin_mode():
+    enabled = c.toggle_admin_mode()
+    c.log(f"[Admin] 管理者モード {'有効' if enabled else '無効'}")
+    return redirect(request.referrer or url_for('dashboard.index'))
+
+
 @bp.route('/save_config', methods=['POST'])
 def save_config_route():
     conf = c.load_config()
@@ -45,6 +52,10 @@ def save_config_route():
         obs_archive['timeout'] = int(request.form.get('obs_archive_timeout', '10').strip() or '10')
     except (ValueError, TypeError):
         obs_archive['timeout'] = 10
+
+    # OBS archive 有効 + admin_mode OFF は自動 VOD DL を強制オフ
+    if obs_archive.get('enabled') and not c.is_admin_mode():
+        conf['enable_vod_download'] = False
 
     c.save_config(conf)
     return redirect(url_for('dashboard.index'))
