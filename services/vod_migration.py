@@ -109,7 +109,7 @@ def run_migration_item(
         return {"ok": False, "error": "secretary_bot_url not configured"}
 
     url = f"{base_url}/api/obs_archive/vod_migration/ingest"
-    timeout = int(cfg.get("timeout") or 15)
+    timeout = int(cfg.get("migration_timeout") or 600)
     channel_name = conf.get("channel_name", "")
 
     payload = {
