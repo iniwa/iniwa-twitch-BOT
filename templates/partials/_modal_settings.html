@@ -36,6 +36,10 @@
                         <label style="font-size:0.9em;">タイムアウト (秒)</label>
                         <input type="number" name="obs_archive_timeout" value="{{ config.get('obs_archive', {}).get('timeout', 10) }}" min="1" max="60" style="margin-top:3px; width:80px;">
                     </div>
+                    <div style="margin-top:8px;">
+                        <button type="button" class="btn btn-info" style="font-size:0.85em; padding:4px 10px;" onclick="testObsArchiveConnection()">🔌 接続テスト (保存済み設定)</button>
+                        <span id="obs-test-result" style="margin-left:8px; font-size:0.85em;"></span>
+                    </div>
                 </div>
                 <div style="margin-top:10px;">
                     <label style="color:var(--text-secondary);">🚫 非表示ユーザーリスト</label>
@@ -57,3 +61,27 @@
         </div>
     </div>
 </div>
+<script>
+function testObsArchiveConnection() {
+    var el = document.getElementById('obs-test-result');
+    el.style.color = '';
+    el.textContent = '確認中...';
+    fetch('/api/obs_archive/test', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) {
+                var status = (d.body && d.body.status) ? d.body.status : '';
+                el.textContent = '✅ 接続OK' + (status ? ' (' + status + ')' : '');
+                el.style.color = 'var(--success)';
+            } else {
+                var code = d.status_code ? ' (HTTP ' + d.status_code + ')' : '';
+                el.textContent = '❌ ' + (d.error || ('接続失敗' + code));
+                el.style.color = '#e17055';
+            }
+        })
+        .catch(function(e) {
+            el.textContent = '❌ ' + e;
+            el.style.color = '#e17055';
+        });
+}
+</script>

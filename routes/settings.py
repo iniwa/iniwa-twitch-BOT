@@ -1,4 +1,5 @@
-from flask import Blueprint, request, redirect, url_for
+from flask import Blueprint, request, redirect, url_for, jsonify
+import requests
 import config as c
 from services.storage import delete_history_data
 from services.twitch_api import force_update_followers
@@ -47,6 +48,32 @@ def save_config_route():
 
     c.save_config(conf)
     return redirect(url_for('dashboard.index'))
+
+
+@bp.route('/api/obs_archive/test', methods=['POST'])
+def obs_archive_test():
+    """保存済み OBS archive 設定で secretary-bot への疎通を確認する。
+    OBS 録画の開始・停止は行わない。"""
+    conf = c.load_config()
+    cfg = conf.get('obs_archive', {})
+    if not cfg.get('enabled') or not cfg.get('secretary_bot_url', '').strip():
+        return jsonify({"ok": False, "error": "OBS archive が無効か URL 未設定です"})
+    url = cfg['secretary_bot_url'].rstrip('/') + '/api/obs/archive-stream/status'
+    timeout = int(cfg.get('timeout') or 10)
+    headers = {}
+    token = cfg.get('token', '').strip()
+    if token:
+        headers['X-Bot-Token'] = token
+    try:
+        r = requests.get(url, headers=headers, timeout=timeout)
+        body = None
+        try:
+            body = r.json()
+        except Exception:
+            pass
+        return jsonify({"ok": r.ok, "status_code": r.status_code, "body": body})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
 
 @bp.route('/debug_update_followers', methods=['POST'])
