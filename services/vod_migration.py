@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
-from services.storage import load_stream_index, save_stream_index
+from services.storage import ARCHIVE_WAIT_DIR, load_stream_index, save_stream_index
 
 _ALREADY_MIGRATED_STATUSES = {"incoming", "encoded", "preview_ready"}
 _JST = timezone(timedelta(hours=9))
@@ -22,6 +22,25 @@ def _obs_cfg(conf: dict) -> dict:
 def _headers(cfg: dict) -> dict:
     token = str(cfg.get("token") or "").strip()
     return {"X-Bot-Token": token} if token else {}
+
+
+def _resolve_source_path(file_path: str) -> tuple[str | None, list[str]]:
+    """Return an existing VOD path, including legacy /app/downloads fallback."""
+    checked = []
+    if file_path:
+        checked.append(file_path)
+        if os.path.exists(file_path):
+            return file_path, checked
+
+    filename = os.path.basename(file_path or "")
+    if filename:
+        wait_path = os.path.join(ARCHIVE_WAIT_DIR, filename)
+        if wait_path not in checked:
+            checked.append(wait_path)
+        if os.path.exists(wait_path):
+            return wait_path, checked
+
+    return None, checked
 
 
 def scan_migration_candidates(conf: dict) -> dict:
@@ -66,23 +85,26 @@ def scan_migration_candidates(conf: dict) -> dict:
             skipped.append({"stream_id": stream_id, "reason": "no_file_path"})
             continue
 
-        if not os.path.exists(file_path):
+        resolved_path, checked_paths = _resolve_source_path(file_path)
+        if not resolved_path:
             skipped.append({
                 "stream_id": stream_id,
                 "reason": "file_missing",
                 "file_path": file_path,
+                "checked_paths": checked_paths,
             })
             continue
 
         try:
-            file_size = os.path.getsize(file_path)
+            file_size = os.path.getsize(resolved_path)
         except OSError:
             file_size = 0
 
         candidates.append({
             "stream_id": stream_id,
-            "source_filename": os.path.basename(file_path),
-            "source_path": file_path,
+            "source_filename": os.path.basename(resolved_path),
+            "source_path": resolved_path,
+            "original_file_path": file_path,
             "title": entry.get("title", ""),
             "game_name": entry.get("game_name", ""),
             "start_time": entry.get("start_time"),

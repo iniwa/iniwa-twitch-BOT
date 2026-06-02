@@ -451,6 +451,9 @@ function _renderVodMigrSkipped(skipped) {
 
     var details = skipped.slice(0, 30).map(function(item) {
         var extra = item.file_path ? ' - ' + _escapeHtml(item.file_path) : '';
+        if (item.checked_paths && item.checked_paths.length > 1) {
+            extra += ' / 確認: ' + item.checked_paths.map(function(path) { return _escapeHtml(path); }).join(', ');
+        }
         if (item.obs_archive_status) extra += ' (' + _escapeHtml(item.obs_archive_status) + ')';
         return '<li><code>' + _escapeHtml(item.stream_id || '-') + '</code>: ' + _escapeHtml(_vodMigrSkipLabel(item.reason)) + extra + '</li>';
     }).join('');
