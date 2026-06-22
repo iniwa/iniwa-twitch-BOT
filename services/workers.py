@@ -15,8 +15,6 @@ from services.storage import (
 )
 from services.download import auto_download_task, YT_DLP_AVAILABLE
 from services.irc import irc_worker
-from services.obs_notifier import notify_stream_start, notify_stream_end
-from services.obs_archive_status import poll_archive_status_after_stream_end
 
 EMPTY_MINUTE_STATS = {
     'messages': [], 'emote_counts': {},
@@ -161,29 +159,6 @@ def _handle_stream_end(conf, finished_id):
             else:
                 c.log('[WARN] 時間計算エラー: start_time の解析に失敗')
 
-    # secretary-bot に配信終了を通知（OBS 録画停止を依頼）
-    ended_at = c.get_now().isoformat()
-    stream_data_for_notify = {
-        'id': finished_id,
-        'title': entry.get('title'),
-        'game_name': entry.get('game_name'),
-        'started_at': entry.get('start_time'),
-    }
-    threading.Thread(
-        target=notify_stream_end,
-        kwargs={'conf': conf, 'stream_data': stream_data_for_notify,
-                'ended_at': ended_at, 'log_fn': c.log},
-        daemon=True,
-    ).start()
-
-    if conf.get('obs_archive', {}).get('enabled'):
-        threading.Thread(
-            target=poll_archive_status_after_stream_end,
-            kwargs={'conf': conf, 'stream_id': finished_id, 'log_fn': c.log,
-                    'attempts': 12, 'interval_sec': 30},
-            daemon=True,
-        ).start()
-
     if conf.get('enable_vod_download'):
         threading.Thread(
             target=auto_download_task, args=(conf, finished_id), daemon=True
@@ -192,6 +167,7 @@ def _handle_stream_end(conf, finished_id):
     c.current_session_viewers.clear()
     c.current_stream_id = None
     c.current_game = None
+    c.clear_current_stream()
     c.state.reset()
 
 
@@ -273,6 +249,8 @@ def viewer_worker_loop(conf):
                 last_follow_check = time.time()
 
             if not conf.get('is_running'):
+                # Bot 停止中は外部ステータスを古いライブ状態のまま残さない。
+                c.clear_current_stream()
                 time.sleep(10)
                 continue
 
@@ -302,6 +280,12 @@ def viewer_worker_loop(conf):
 
             stream_id = stream_data['id'] if is_live and stream_data else None
 
+            # 実際に観測した Twitch ライブ状態（デバッグ注入の前に確定）。
+            # 外部ステータス API にはこの実観測状態のみを公開する。
+            real_twitch_live = is_live
+            real_stream_id = stream_id
+            real_stream_data = stream_data
+
             # デバッグモード
             if conf.get('ignore_stream_status') and not is_live:
                 is_live = True
@@ -326,13 +310,6 @@ def viewer_worker_loop(conf):
                 c.state.reset()
                 c.log(f'[START] 配信開始検知: {stream_data.get("title")} ({c.current_game})')
 
-                # secretary-bot に配信開始を通知（OBS 録画開始を依頼）
-                threading.Thread(
-                    target=notify_stream_start,
-                    kwargs={'conf': conf, 'stream_data': stream_data, 'log_fn': c.log},
-                    daemon=True,
-                ).start()
-
                 idx = load_stream_index()
                 if stream_id not in idx:
                     idx[stream_id] = {
@@ -345,11 +322,23 @@ def viewer_worker_loop(conf):
                             '{width}', '%{width}'
                         ).replace('{height}', '%{height}')
                     }
-                if conf.get('obs_archive', {}).get('enabled'):
-                    idx[stream_id]['obs_archive_status'] = 'recording'
                 save_stream_index(idx)
             else:
                 c.current_game = stream_data.get('game_name')
+
+            # 外部ステータス API 用スナップショットを更新する。
+            # 実観測した Twitch ライブ状態のみを公開し、ignore_stream_status の
+            # debug_stream は外部に出さない（OBS 誤録画を防ぐため）。
+            if real_twitch_live and real_stream_data:
+                c.set_current_stream({
+                    'id': real_stream_id,
+                    'title': real_stream_data.get('title'),
+                    'game_name': real_stream_data.get('game_name'),
+                    'started_at': real_stream_data.get('started_at'),
+                    'channel_name': conf.get('channel_name', ''),
+                })
+            else:
+                c.clear_current_stream()
 
             chatters = get_chatters(conf)
             if chatters is None:

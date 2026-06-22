@@ -4,7 +4,6 @@ from flask import Flask
 from routes import register_blueprints
 from routes.filters import register_filters
 from services.workers import start_workers
-import config as c
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,15 +15,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 register_filters(app)
 register_blueprints(app)
-
-
-@app.context_processor
-def inject_admin_context():
-    conf = c.load_config()
-    return {
-        'admin_mode': c.is_admin_mode(),
-        'obs_archive_enabled': conf.get('obs_archive', {}).get('enabled', False),
-    }
 
 try:
     start_workers()

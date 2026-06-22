@@ -1,5 +1,17 @@
 # Twitch-to-OBS Archive Recording Compatibility
 
+> **Superseded (2026-06-22).** The push-notification integration direction
+> described below is no longer in effect. `iniwa-twitch-bot` no longer calls,
+> configures, or displays state from `secretary-bot`, and it contains no OBS
+> recording integration. It now exposes only a generic, read-only Twitch stream
+> status API (`GET /api/stream/status`); `secretary-bot` polls that API and
+> independently owns all OBS archive recording. VOD download remains an
+> independent built-in feature controlled solely by `enable_vod_download`
+> (default off). See
+> `D:/Git/secretary-bot/docs/decisions/2026-06-22-twitch-stream-status-pull.md`.
+> The OBS archive layout, filename, metadata, and Windows Agent ownership rules
+> below remain valid as `secretary-bot`-owned behavior.
+
 ## Context
 
 The local streaming workflow now runs Twitch streaming and OBS recording in

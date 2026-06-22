@@ -21,11 +21,9 @@
                 <form action="/force_sync_history" method="post" onsubmit="return confirm('Twitch APIから最新情報を取得し、タイトルや時間を更新します。\n(ゲーム名は現在の設定を維持します)\nよろしいですか？');">
                     <button class="btn btn-primary" style="font-size:0.85em;">🔄 API更新</button>
                 </form>
-                {% if not (obs_archive_enabled and not admin_mode) %}
                 <form action="/download_all_vods" method="post" onsubmit="return confirm('未保存のアーカイブを全てダウンロードしますか？時間がかかります。');">
                     <button class="btn btn-bulk" style="font-size:0.85em;">📥 一括ダウンロード</button>
                 </form>
-                {% endif %}
             </div>
         </div>
 
@@ -79,54 +77,17 @@
                             </td>
                             <td>{{ data.avg_viewers }} / {{ data.max_viewers }}</td>
                             <td id="progress-{{ sid }}" class="nowrap">
-                                {% if obs_archive_enabled %}
-                                    {% set oas = data.get('obs_archive_status', '') %}
-                                    {% if oas == 'recording' %}
-                                        <span style="color:#e17055;">🔴 録画中</span>
-                                    {% elif oas == 'incoming' %}
-                                        <span style="color:#7eb8f7;">🕐 エンコード待ち</span>
-                                    {% elif oas == 'encoded' %}
-                                        <span class="status-dl">✅ 保存済</span>
-                                    {% elif oas == 'preview_ready' %}
-                                        <span class="status-dl">✅ 保存済 / プレビュー可</span>
-                                    {% elif oas == 'unknown' %}
-                                        <span style="color:var(--warning);" title="{{ data.get('obs_archive_error', '') }}">⚠️ 確認不可</span>
+                                {% if data.vod_status == 'downloaded' %}
+                                    {% if data.encode_status == 'encoded' %}
+                                        <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
+                                    {% elif data.encode_status == 'missing' %}
+                                        <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
                                     {% else %}
-                                        {# not_recorded / 未設定 → レガシーVOD状態にフォールバック #}
-                                        {% if data.vod_status == 'downloaded' %}
-                                            {% if data.encode_status == 'encoded' %}
-                                                <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
-                                            {% elif data.encode_status == 'missing' %}
-                                                <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
-                                            {% else %}
-                                                <span style="color:#7eb8f7;" title="{{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB">🕐 VOD保存済 / 移行待ち</span>
-                                            {% endif %}
-                                        {% elif data.vod_status == 'downloading' %}
-                                            <div class="status-wait">⏳ DL中...</div>
-                                        {% elif data.vod_status == 'failed' %}
-                                            <span class="status-fail">❌ 失敗</span>
-                                        {% else %}
-                                            <span style="color:var(--text-secondary);">- 未保存</span>
-                                        {% endif %}
+                                        <span style="color:#7eb8f7;" title="エンコード待ち ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">🕐 エンコード待ち</span>
                                     {% endif %}
-                                    <button type="button"
-                                        class="btn obs-archive-refresh-btn"
-                                        style="font-size:0.72em; padding:2px 5px; margin-left:3px; opacity:0.7;"
-                                        data-sid="{{ sid }}"
-                                        title="OBSアーカイブ状態を再確認">↻</button>
-                                {% else %}
-                                    {% if data.vod_status == 'downloaded' %}
-                                        {% if data.encode_status == 'encoded' %}
-                                            <span class="status-dl" title="エンコード済 ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">✅ エンコード済</span>
-                                        {% elif data.encode_status == 'missing' %}
-                                            <span style="color:var(--warning);" title="ファイルが見つかりません">⚠️ ファイル不明</span>
-                                        {% else %}
-                                            <span style="color:#7eb8f7;" title="エンコード待ち ({{ '{:.1f}'.format(data.archive_file_size / 1073741824) }}GB)">🕐 エンコード待ち</span>
-                                        {% endif %}
-                                    {% elif data.vod_status == 'downloading' %}<div class="status-wait">⏳ DL中...</div>
-                                    {% elif data.vod_status == 'failed' %}<span class="status-fail">❌ 失敗</span>
-                                    {% else %}<span style="color:var(--text-secondary);">- 未保存</span>{% endif %}
-                                {% endif %}
+                                {% elif data.vod_status == 'downloading' %}<div class="status-wait">⏳ DL中...</div>
+                                {% elif data.vod_status == 'failed' %}<span class="status-fail">❌ 失敗</span>
+                                {% else %}<span style="color:var(--text-secondary);">- 未保存</span>{% endif %}
                             </td>
                             <td class="nowrap">
                                 <button class="btn btn-edit btn-edit-stream"
@@ -134,7 +95,6 @@
                                     data-title="{{ data.title|replace('"', '&quot;') }}"
                                     data-game="{{ data.game_name|replace('"', '&quot;') }}">✏️</button>
 
-                                {% if not (obs_archive_enabled and not admin_mode) %}
                                 {% if data.vod_status == 'downloading' %}
                                     <form action="/cancel_download/{{ sid }}" method="post" style="display:inline;">
                                         <button class="btn btn-stop" onclick="return confirm('ダウンロードを中止しますか？')">🛑</button>
@@ -148,7 +108,6 @@
                                         <button class="btn btn-dl">📥</button>
                                     </form>
                                 {% endif %}
-                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -157,37 +116,6 @@
                 </div>
                 {% else %}<div style="text-align:center; padding:20px; color:var(--text-secondary);">まだ記録された配信データがありません</div>{% endif %}
             </div>
-
-            {% if obs_archive_enabled and admin_mode %}
-            <div class="card" id="vod-migration-card" style="margin-top:16px;">
-                <h2 style="display:flex; align-items:center; gap:8px;">
-                    📦 VOD移行ツール
-                    <span style="font-size:0.75em; font-weight:normal; color:var(--text-secondary);">ダウンロード済みVODをOBSアーカイブに取り込む（管理者モード）</span>
-                </h2>
-                <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-                    <button id="vod-migr-scan-btn" class="btn btn-primary" style="font-size:0.85em;">🔍 スキャン</button>
-                    <button id="vod-migr-run-btn" class="btn" style="font-size:0.85em; display:none;">▶ 選択項目を移行</button>
-                    <span id="vod-migr-status" style="font-size:0.85em; color:var(--text-secondary); align-self:center;"></span>
-                </div>
-                <div id="vod-migr-skipped" style="display:none; margin-bottom:12px; font-size:0.85em; color:var(--text-secondary);"></div>
-                <div id="vod-migr-result" style="display:none; overflow-x:auto;">
-                    <table id="vod-migr-table">
-                        <thead>
-                            <tr>
-                                <th style="width:32px;"><input type="checkbox" id="vod-migr-check-all" title="全て選択"></th>
-                                <th>日時</th>
-                                <th>タイトル</th>
-                                <th>ゲーム</th>
-                                <th>ファイル名</th>
-                                <th>サイズ</th>
-                                <th>状態</th>
-                            </tr>
-                        </thead>
-                        <tbody id="vod-migr-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
-            {% endif %}
         </div>
 
         <div id="calendar" class="tab-content">
@@ -363,197 +291,6 @@ document.addEventListener('click', function(e) {
     if (btn) {
         openEditStreamModal(btn.dataset.sid, btn.dataset.title, btn.dataset.game);
     }
-
-    var mbtn = e.target.closest('#vod-migr-scan-btn');
-    if (mbtn) { vodMigrScan(); return; }
-    var rbtn2 = e.target.closest('#vod-migr-run-btn');
-    if (rbtn2) { vodMigrRun(); return; }
-    var chkAll = e.target.closest('#vod-migr-check-all');
-    if (chkAll) {
-        document.querySelectorAll('.vod-migr-row-check').forEach(function(cb) { cb.checked = chkAll.checked; });
-        return;
-    }
-
-    var rbtn = e.target.closest('.obs-archive-refresh-btn');
-    if (rbtn) {
-        var sid = rbtn.dataset.sid;
-        var cell = document.getElementById('progress-' + sid);
-        if (cell) {
-            rbtn.textContent = '⏳';
-            rbtn.disabled = true;
-        }
-        fetch('/api/obs_archive/status/' + sid + '/refresh', {method: 'POST'})
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                var labels = {
-                    recording: '🔴 録画中',
-                    incoming: '🕐 エンコード待ち',
-                    encoded: '✅ 保存済',
-                    preview_ready: '✅ 保存済 / プレビュー可',
-                    not_recorded: '- 未保存',
-                    unknown: '⚠️ 確認不可'
-                };
-                var status = d.status || 'unknown';
-                var label = labels[status] || ('- ' + status);
-                if (cell) {
-                    var span = cell.querySelector('span');
-                    if (span) { span.textContent = label; }
-                }
-                if (rbtn) {
-                    rbtn.textContent = '↻';
-                    rbtn.disabled = false;
-                }
-            })
-            .catch(function() {
-                if (rbtn) { rbtn.textContent = '↻'; rbtn.disabled = false; }
-            });
-    }
 });
-
-function _fmt_mb(bytes) {
-    if (!bytes) return '-';
-    return (bytes / 1048576).toFixed(0) + ' MB';
-}
-
-function _vodMigrSkipLabel(reason) {
-    var labels = {
-        already_in_obs_archive: 'OBSアーカイブに登録済み',
-        file_missing: 'ファイルが見つからない',
-        no_file_path: '保存先パスなし'
-    };
-    return labels[reason] || reason || '不明';
-}
-
-function _escapeHtml(value) {
-    return String(value || '').replace(/[&<>"']/g, function(ch) {
-        return {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[ch];
-    });
-}
-
-function _renderVodMigrSkipped(skipped) {
-    var el = document.getElementById('vod-migr-skipped');
-    if (!el) return;
-    if (!skipped || skipped.length === 0) {
-        el.style.display = 'none';
-        el.innerHTML = '';
-        return;
-    }
-
-    var counts = {};
-    skipped.forEach(function(item) {
-        var reason = item.reason || 'unknown';
-        counts[reason] = (counts[reason] || 0) + 1;
-    });
-
-    var summary = Object.keys(counts).map(function(reason) {
-        return _vodMigrSkipLabel(reason) + ': ' + counts[reason] + '件';
-    }).join(' / ');
-
-    var details = skipped.slice(0, 30).map(function(item) {
-        var extra = item.file_path ? ' - ' + _escapeHtml(item.file_path) : '';
-        if (item.checked_paths && item.checked_paths.length > 1) {
-            extra += ' / 確認: ' + item.checked_paths.map(function(path) { return _escapeHtml(path); }).join(', ');
-        }
-        if (item.obs_archive_status) extra += ' (' + _escapeHtml(item.obs_archive_status) + ')';
-        return '<li><code>' + _escapeHtml(item.stream_id || '-') + '</code>: ' + _escapeHtml(_vodMigrSkipLabel(item.reason)) + extra + '</li>';
-    }).join('');
-
-    var more = skipped.length > 30 ? '<div style="margin-top:4px;">ほか ' + (skipped.length - 30) + '件</div>' : '';
-    el.innerHTML = '<details><summary>スキップ理由: ' + summary + '</summary><ul style="margin:6px 0 0 18px;">' + details + '</ul>' + more + '</details>';
-    el.style.display = '';
-}
-
-function vodMigrScan() {
-    var statusEl = document.getElementById('vod-migr-status');
-    var resultEl = document.getElementById('vod-migr-result');
-    var tbody = document.getElementById('vod-migr-tbody');
-    var runBtn = document.getElementById('vod-migr-run-btn');
-    var skippedEl = document.getElementById('vod-migr-skipped');
-    if (statusEl) statusEl.textContent = 'スキャン中...';
-    if (resultEl) resultEl.style.display = 'none';
-    if (runBtn) runBtn.style.display = 'none';
-    if (skippedEl) skippedEl.style.display = 'none';
-    fetch('/api/obs_archive/vod_migration/scan')
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d.ok) {
-                if (statusEl) statusEl.textContent = 'エラー: ' + (d.error || '不明');
-                return;
-            }
-            var cands = d.candidates || [];
-            if (statusEl) statusEl.textContent = '候補: ' + cands.length + '件 / スキップ: ' + (d.skipped || []).length + '件';
-            _renderVodMigrSkipped(d.skipped || []);
-            if (tbody) {
-                tbody.innerHTML = '';
-                cands.forEach(function(item) {
-                    var tr = document.createElement('tr');
-                    tr.innerHTML = '<td><input type="checkbox" class="vod-migr-row-check" data-sid="' + item.stream_id + '" data-filename="' + (item.source_filename || '') + '" checked></td>'
-                        + '<td>' + (item.start_time ? item.start_time.slice(0,10) : '-') + '</td>'
-                        + '<td>' + (item.title || '').substring(0, 40) + '</td>'
-                        + '<td>' + (item.game_name || '') + '</td>'
-                        + '<td style="font-size:0.8em;">' + (item.source_filename || '') + '</td>'
-                        + '<td>' + _fmt_mb(item.file_size) + '</td>'
-                        + '<td id="vod-migr-rowstate-' + item.stream_id + '" style="color:var(--text-secondary);">待機</td>';
-                    tbody.appendChild(tr);
-                });
-            }
-            if (resultEl) resultEl.style.display = cands.length > 0 ? '' : 'none';
-            if (runBtn) runBtn.style.display = cands.length > 0 ? '' : 'none';
-        })
-        .catch(function(err) {
-            if (statusEl) statusEl.textContent = '通信エラー: ' + err;
-        });
-}
-
-function vodMigrRun() {
-    var statusEl = document.getElementById('vod-migr-status');
-    var runBtn = document.getElementById('vod-migr-run-btn');
-    var checks = document.querySelectorAll('.vod-migr-row-check:checked');
-    var sids = [];
-    checks.forEach(function(cb) { sids.push(cb.dataset.sid); });
-    if (sids.length === 0) {
-        if (statusEl) statusEl.textContent = '移行する項目を選択してください';
-        return;
-    }
-    if (!confirm(sids.length + '件を移行します。よろしいですか？')) return;
-    if (runBtn) runBtn.disabled = true;
-    if (statusEl) statusEl.textContent = '移行中... (0/' + sids.length + ')';
-
-    var done = 0;
-    function runNext(idx) {
-        if (idx >= sids.length) {
-            if (statusEl) statusEl.textContent = '完了: ' + done + '/' + sids.length + '件';
-            if (runBtn) runBtn.disabled = false;
-            return;
-        }
-        var sid = sids[idx];
-        var rowState = document.getElementById('vod-migr-rowstate-' + sid);
-        if (rowState) rowState.textContent = '⏳ 移行中...';
-        fetch('/api/obs_archive/vod_migration/run', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({stream_ids: [sid]})
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            var res = (d.results || [])[0] || {};
-            var state = res.status || (d.ok ? 'ingested' : 'failed');
-            var labels = {ingested: '✅ 取り込み済', skipped: '⏭ スキップ', failed: '❌ 失敗'};
-            var label = labels[state] || state;
-            if (res.error) label += ': ' + res.error;
-            else if (res.reason) label += ' (' + res.reason + ')';
-            if (rowState) rowState.textContent = label;
-            if (state === 'ingested' || state === 'skipped') done++;
-            if (statusEl) statusEl.textContent = '移行中... (' + (idx+1) + '/' + sids.length + ')';
-            runNext(idx + 1);
-        })
-        .catch(function(err) {
-            if (rowState) rowState.textContent = '❌ 通信エラー';
-            if (statusEl) statusEl.textContent = '移行中... (' + (idx+1) + '/' + sids.length + ')';
-            runNext(idx + 1);
-        });
-    }
-    runNext(0);
-}
 </script>
 {% endblock %}

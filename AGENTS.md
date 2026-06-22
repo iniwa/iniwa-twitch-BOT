@@ -34,6 +34,33 @@ Claude Code is responsible for:
 - running requested verification where possible
 - reporting changed files, summary, verification results, blocked checks, and design questions
 
+## Claude Code Model Orchestration
+Claude Code should normally run with Opus as the primary coordinator.
+
+Opus is responsible for:
+- reading `AGENTS.md`, `CLAUDE.md`, handoff files, and relevant project context
+- interpreting requirements, constraints, non-goals, and verification expectations
+- deciding the implementation plan and whether subagents are appropriate
+- giving Sonnet subagents narrow implementation or investigation tasks
+- reviewing subagent output before final reporting
+- making design-sensitive decisions only when they are already allowed by the handoff
+
+Sonnet subagents are responsible for:
+- mechanical code edits
+- repetitive refactors inside an explicit file scope
+- localized tests, verification, and log/code inspection
+- implementation tasks where goal, files, constraints, and non-goals are already clear
+
+Sonnet subagents must not:
+- change documented design intent on their own
+- expand the edit scope beyond the handoff without Opus review
+- introduce dependencies, build tooling, packaging, CI/CD, deployment, or external exposure changes unless explicitly listed
+- touch secrets, credentials, `.env`, or local settings
+- make final architectural decisions without returning the question to Opus/Codex
+
+For very small edits, Opus may implement directly instead of creating unnecessary subagent overhead.
+If the requested Claude Code environment cannot use subagents or the intended model split, Claude Code should continue with the available model and report that limitation.
+
 ## Decision Rule
 Keep work in Codex when:
 - requirements are ambiguous
@@ -136,7 +163,45 @@ Keep `AGENTS.md` focused on short, durable rules that future Codex and Claude Co
 Do not add `Alternatives Considered` as a default Decision Log heading. When rejected options or longer background matter, summarize only the durable rule in `AGENTS.md` and put the detail under `docs/decisions/`.
 ## Decision Log
 
+### 2026-06-22: Reverse integration — expose read-only stream status, no secretary-bot/OBS integration
+
+Context:
+- The push-notification coupling to `secretary-bot` is no longer desired. This
+  project should remain usable as an independent Twitch bot and dashboard.
+
+Decision:
+- `iniwa-twitch-bot` exposes a generic, read-only current-stream status API
+  (`GET /api/stream/status`) that reports only worker-held state and performs no
+  Twitch API call per request and no external service call.
+- This project does not call, configure, display state from, or otherwise
+  integrate with `secretary-bot`, and contains no OBS recording integration.
+  `secretary-bot` polls the status API and independently owns all OBS archive
+  recording, file organization, encoding, previews, and retention.
+- VOD download (manual, bulk, cancel, delete, history sync, and post-stream
+  auto-download) is an independent built-in feature controlled solely by
+  `enable_vod_download` (default off). No OBS/administrator-mode gating.
+
+Reason:
+- This project already owns Twitch stream state; reversing the direction to a
+  pull model removes cross-project coupling and lets each side own its domain.
+
+Constraints Introduced:
+- `GET /api/stream/status` must stay read-only and never trigger a Twitch API
+  call or contact `secretary-bot`.
+- Keep VOD download independently configurable and default off.
+
+Do Not Change Casually:
+- Do not re-add secretary-bot notification, OBS archive settings/status display,
+  connection tests, administrator-mode gating, or VOD-to-OBS migration.
+- Detail: `docs/decisions/2026-06-01-twitch-obs-archive-recording.md` (superseded
+  integration direction) and
+  `D:/Git/secretary-bot/docs/decisions/2026-06-22-twitch-stream-status-pull.md`.
+
 ### 2026-06-01: Twitch detects streams, secretary-bot owns OBS archive recording
+
+> Superseded by the 2026-06-22 decision above. The push-notification direction
+> is retired; the OBS archive ownership rules remain valid as secretary-bot-owned
+> behavior.
 
 Context:
 - Local streaming now records with OBS in parallel, so Twitch VOD download is no longer the normal archive source.

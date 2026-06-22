@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, jsonify, request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import config as c
 from services.predictions import get_current_prediction
 from services.twitch_api import get_channel_info_by_id, search_games
@@ -226,6 +226,36 @@ def api_status():
         'rules_status': get_rules_status(),
         'total_comments': c.state.get_count(),
         'events': c.events[:50],
+    })
+
+
+@bp.route('/api/stream/status')
+def api_stream_status():
+    """外部消費者向けの read-only な現在配信ステータス。
+
+    ワーカーが保持しているスナップショットのみを返す。Twitch API 呼び出しや
+    外部サービスへの問い合わせは一切行わない。
+    """
+    snapshot = c.get_current_stream()
+    checked_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    if snapshot:
+        return jsonify({
+            'ok': True,
+            'live': True,
+            'stream': {
+                'id': snapshot.get('id'),
+                'title': snapshot.get('title'),
+                'game_name': snapshot.get('game_name'),
+                'started_at': snapshot.get('started_at'),
+                'channel_name': snapshot.get('channel_name'),
+            },
+            'checked_at': checked_at,
+        })
+    return jsonify({
+        'ok': True,
+        'live': False,
+        'stream': None,
+        'checked_at': checked_at,
     })
 
 

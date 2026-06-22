@@ -52,8 +52,42 @@ Twitch 配信のための多機能 Bot & 管理ダッシュボード。
 - yt-dlp + ffmpeg による配信アーカイブのダウンロード
 - 一括ダウンロード・個別ダウンロード
 - ダウンロード進捗表示・キャンセル・削除
-- 配信終了時の自動ダウンロード
+- 配信終了時の自動ダウンロード (`enable_vod_download`、デフォルト無効)
 - Twitch VOD 履歴の同期
+
+VOD ダウンロードは本プロジェクト内蔵の独立機能です。外部サービス連携や
+管理者モードには依存しません。
+
+### 配信ステータス API (`GET /api/stream/status`)
+
+外部消費者向けに、現在の Twitch 配信状態を read-only で公開します。
+
+- ワーカーが保持している状態のみを返し、リクエストごとに Twitch API を呼び
+  出しません。
+- OBS 制御や外部サービス (secretary-bot 等) への問い合わせは行いません。
+
+ライブ時のレスポンス例:
+
+```json
+{
+  "ok": true,
+  "live": true,
+  "stream": {
+    "id": "123456",
+    "title": "stream title",
+    "game_name": "Final Fantasy XIV",
+    "started_at": "2026-06-22T12:00:00Z",
+    "channel_name": "iniwa"
+  },
+  "checked_at": "2026-06-22T12:00:15Z"
+}
+```
+
+オフライン時は `live` が `false`、`stream` が `null` になります。
+
+> このプロジェクトは汎用的な Twitch 配信状態のみを公開します。OBS 録画
+> アーカイブの制御・整理・エンコード・保持は外部の `secretary-bot` が担当し、
+> 本プロジェクトには OBS 録画連携機能はありません。
 
 ## 技術スタック
 

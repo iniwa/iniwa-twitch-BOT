@@ -28,21 +28,31 @@ current_game = None
 file_lock = threading.RLock()
 download_lock = threading.Lock()
 
-# 管理者モード（インメモリのみ・再起動でリセット）
-_admin_lock = threading.Lock()
-_admin_mode: bool = False
+# 現在配信のスナップショット（インメモリのみ・_stream_lock で保護）
+# ライブ検知時にワーカーが更新し、配信終了時にクリアする。
+# 外部消費者向けの read-only ステータス API がこの状態を報告する。
+_stream_lock = threading.Lock()
+current_stream_snapshot = None
 
 
-def is_admin_mode() -> bool:
-    with _admin_lock:
-        return _admin_mode
+def set_current_stream(snapshot: dict) -> None:
+    """ライブ観測時にワーカーが現在配信のスナップショットを保存する。"""
+    global current_stream_snapshot
+    with _stream_lock:
+        current_stream_snapshot = dict(snapshot)
 
 
-def toggle_admin_mode() -> bool:
-    global _admin_mode
-    with _admin_lock:
-        _admin_mode = not _admin_mode
-        return _admin_mode
+def clear_current_stream() -> None:
+    """配信終了時に現在配信のスナップショットをクリアする。"""
+    global current_stream_snapshot
+    with _stream_lock:
+        current_stream_snapshot = None
+
+
+def get_current_stream():
+    """現在配信のスナップショットのコピーを返す（なければ None）。"""
+    with _stream_lock:
+        return dict(current_stream_snapshot) if current_stream_snapshot else None
 
 # ダウンロード状態 (download_lock で保護)
 download_progress = {}
@@ -67,12 +77,6 @@ DEFAULT_CONFIG = {
     'is_running': False, 'rules': [], 'presets': [],
     'prediction_presets': [],
     'layout': DEFAULT_LAYOUT,
-    'obs_archive': {
-        'enabled': False,
-        'secretary_bot_url': '',   # 例: http://192.168.1.x:8080
-        'token': '',               # X-Bot-Token ヘッダー（任意）
-        'timeout': 10,
-    },
 }
 
 
