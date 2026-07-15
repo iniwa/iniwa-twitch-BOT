@@ -1,240 +1,80 @@
 # AGENTS.md
 
 ## Purpose
-This file is the Codex-side working agreement for `iniwa-twitch-bot`.
 
-Codex uses this file to preserve design intent, decide whether work should stay in Codex or be handed off to Claude Code, and review implementation results.
-Claude Code uses `CLAUDE.md` for execution rules.
+This is the Codex-side working agreement for `iniwa-twitch-bot`. It records design intent, delegation policy, review rules, and durable project constraints. `CLAUDE.md` contains Claude Code execution rules.
 
 ## Project Summary
-- Project name: `iniwa-twitch-bot`
-- Purpose: Twitch bot and management dashboard for streaming operations on Raspberry Pi Docker.
-- Summary from project docs: Twitch bot and management dashboard for streaming operations on Raspberry Pi Docker.
-- Runtime target: Raspberry Pi Docker linux/arm64
-- Repository path: `D:\Git\iniwa-twitch-bot`
-- Stack: Python, Flask, Twitch API, Docker
 
-## Base References
-- Codex base: `D:/Git/CLAUDEmdStrage/_base/AGENTS.md`
-- Claude Code base for Windows/local projects: `D:/Git/CLAUDEmdStrage/_base/CLAUDE_windows.md`
-- Claude Code base for Raspberry Pi Docker projects: `D:/Git/CLAUDEmdStrage/_base/CLAUDE_docker.md`
+- Twitch bot and management dashboard for repeated stream operations.
+- Python 3.12, Flask, gunicorn, Jinja2, browser JavaScript, Twitch API, yt-dlp, and ffmpeg.
+- Runs in Docker with Raspberry Pi `linux/arm64` as the primary target.
+- Existing GitHub Actions publish the configured multi-architecture image to GHCR for manual Portainer deployment.
 
-## Role Split
-Codex is responsible for:
-- clarifying requirements, non-goals, and success criteria
-- identifying change type and design risk
-- preserving responsibility boundaries and design intent
-- preparing scoped Claude Code handoffs when execution is clear
-- reviewing Claude Code output against this file and the handoff
-- recording durable decisions in `AGENTS.md` or `docs/*.md`
+## Read First
 
-Claude Code is responsible for:
-- following the current Codex handoff and `CLAUDE.md`
-- editing only allowed files unless it explains why more files are required
-- running requested verification where possible
-- reporting changed files, summary, verification results, blocked checks, and design questions
+Before meaningful work, inspect:
 
-## Claude Code Model Orchestration
-Claude Code should normally run with Opus as the primary coordinator.
+- `CLAUDE.md`.
+- `README.md`.
+- `app.py`, `config.py`, and affected files under `routes/`, `services/`, `templates/`, `static/`, and `tests/`.
+- `Dockerfile`, `compose.yaml`, and the existing workflow only when build or deployment behavior is in scope.
+- Relevant active records under `docs/`.
 
-Opus is responsible for:
-- reading `AGENTS.md`, `CLAUDE.md`, handoff files, and relevant project context
-- interpreting requirements, constraints, non-goals, and verification expectations
-- deciding the implementation plan and whether subagents are appropriate
-- giving Sonnet subagents narrow implementation or investigation tasks
-- reviewing subagent output before final reporting
-- making design-sensitive decisions only when they are already allowed by the handoff
+## Model and Role Policy
 
-Sonnet subagents are responsible for:
-- mechanical code edits
-- repetitive refactors inside an explicit file scope
-- localized tests, verification, and log/code inspection
-- implementation tasks where goal, files, constraints, and non-goals are already clear
+- Use GPT-5.3-Codex-Spark (`gpt-5.3-codex-spark`) proactively, when available, for low-risk, well-scoped, independently verifiable supporting work that requires no material design judgment or source-code implementation.
+- GPT-5.6 Terra (`gpt-5.6-terra`) or Sol (`gpt-5.6-sol`) owns requirements and design. Whenever Terra is used, set its reasoning level to `high`. Prefer Sol for substantial ambiguity, risk, or cross-boundary reasoning.
+- After design is fixed, delegate source-code implementation first to Claude Code Sonnet 5 at effort medium from the repository root.
+- Only when Sonnet 5 is unavailable because of usage limits or service availability, use GPT-5.6 Luna (`gpt-5.6-luna`) with reasoning level `max` for the same implementation slice.
+- Implementation failure, failed verification, or a design question is not model unavailability. Return it to Codex.
+- Apply this policy to every coordinating Codex model and its subagents. Do not create coordinator-specific exceptions.
+- Codex may retain requirements, design, read-only investigation, synthesis, review, and small documentation-consistency changes in one context.
 
-Sonnet subagents must not:
-- change documented design intent on their own
-- expand the edit scope beyond the handoff without Opus review
-- introduce dependencies, build tooling, packaging, CI/CD, deployment, or external exposure changes unless explicitly listed
-- touch secrets, credentials, `.env`, or local settings
-- make final architectural decisions without returning the question to Opus/Codex
+## Durable Project Rules
 
-For very small edits, Opus may implement directly instead of creating unnecessary subagent overhead.
-If the requested Claude Code environment cannot use subagents or the intended model split, Claude Code should continue with the available model and report that limitation.
+- `GET /api/stream/status` is a generic read-only snapshot of actual Twitch state already held by the worker.
+- A status request must not call the Twitch API, contact `secretary-bot`, control OBS, or call another external service.
+- Do not reintroduce secretary-bot notifications, OBS recording control, OBS archive settings or status, administrator-mode gating, or VOD-to-OBS migration.
+- Twitch VOD download remains an independent built-in feature, including its existing manual and automatic workflows. Automatic download is controlled only by `enable_vod_download`, whose default remains off.
+- Preserve Twitch bot, dashboard, analytics, viewer, rule, prediction, preset, and stream-history behavior outside an approved change.
+- Preserve Raspberry Pi and `linux/arm64` compatibility and the existing Docker image, GitHub Actions, GHCR, Portainer, storage, networking, and external-exposure flow.
+- Keep dependencies minimal and preserve the single-container gunicorn architecture unless an approved design changes it.
 
-## Decision Rule
-Keep work in Codex when:
-- requirements are ambiguous
-- design intent or responsibility boundaries may change
-- the task is small enough to edit and review in one context
-- the main value is planning, review, or documentation consistency
+## Safety and Scope
 
-Hand off to Claude Code when:
-- goal, files, constraints, non-goals, and verification are clear
-- the task is mostly implementation or mechanical editing
-- the allowed edit scope can be stated explicitly
-- Claude Code tooling or iteration speed is useful
+- Preserve unrelated user and other-agent changes. Treat unexpected diffs as having unknown authorship and keep them outside the current task or commit.
+- Do not edit or inspect real Twitch credentials, tokens, `.env` files, runtime configuration, `data/`, `data.db`, downloaded media, stream history, or other production state unless explicitly required.
+- Do not add dependencies or change build tooling, packaging, CI/CD, deployment, image names, ports, host networking, storage mounts, domains, or external exposure outside the approved scope.
+- Do not commit, push, publish an image, or deploy unless explicitly requested.
 
-## Project-Specific Guidance
-- Use Raspberry Pi / Docker guidance from `D:/Git/CLAUDEmdStrage/_base`.
-- Preserve `linux/arm64` compatibility unless the project explicitly supports more architectures.
-- Do not change deployment, image naming, Portainer, or external exposure behavior without explicit approval.
+## Handoff Workflow
 
-## Files To Inspect First
-- README.md
-- app.py
-- config.py
-- requirements.txt
-- Dockerfile
-- compose.yaml
-- docs/
+- Keep work in Codex when its main value is policy, design, review, synthesis, read-only investigation, or a small documentation-only correction.
+- For substantive implementation, create `docs/handoffs/YYYY-MM-DD-<short-task>.md` with the goal, background, files to inspect, files to edit, constraints, non-goals, verification, and expected report.
+- One handoff covers one cohesive, independently verifiable change and its direct regression coverage. Run unresolved discovery as a separate read-only slice.
+- Size the slice so the first intended edit is reachable after reading the listed files. Do not combine broad discovery, unresolved design, and implementation.
+- If a handoff times out before its intended edit, do not rerun it unchanged. Narrow the behavior, files, and verification first.
+- Sonnet 5 implements only the approved slice. Luna at reasoning level `max` may implement that same slice only under the model-unavailability condition above.
+- Codex reviews the report and diff before preparing a later slice. Material design questions return to Terra or Sol.
+- Keep only active or blocked handoffs in `docs/handoffs/`. Move a handoff to `docs/handoffs/archive/` only after implementation, verification, review, required runtime work, and follow-up are complete.
 
-## Files Claude Code May Edit In Scoped Tasks
-- app.py
-- config.py
-- requirements.txt
-- Dockerfile
-- compose.yaml
-- docs/
+## Codex Review
 
-## Constraints
-- Preserve Raspberry Pi / arm64 Docker deployment.
-- Do not commit real Twitch credentials or tokens.
-- Keep dashboard workflows practical for repeated stream operation.
-- Do not change deployment/external exposure without explicit approval.
-- Do not commit automatically unless explicitly requested.
-- Do not revert user or other-agent changes unless explicitly requested.
-- Do not edit secrets, credentials, `.env`, local runtime data, or generated heavy artifacts unless explicitly requested.
+Verify that:
 
-## Handoff Template
-When Codex hands work to Claude Code, create `docs/handoffs/YYYY-MM-DD-<short-task>.md`. Create the `docs/handoffs/` directory if it does not exist. Use this format in that file.
+- Only approved files and behavior changed and unrelated diffs remain untouched.
+- The stream-status endpoint remains read-only and free of request-time Twitch or external calls.
+- No secretary-bot or OBS push integration, VOD gating, or changed default was introduced.
+- Runtime data, credentials, media, deployment, image, network, storage, and exposure boundaries were preserved.
+- Focused tests support the change and blocked checks are explicit.
+- Reusable discoveries are recorded in the correct document without adding implementation history here.
 
-```md
-Read AGENTS.md, CLAUDE.md, and this handoff file before implementation.
-If implementation would violate constraints or require files outside this handoff, stop and ask before editing.
+## Documentation Lifecycle
 
-## Goal
-...
-
-## Background
-...
-
-## Files To Inspect
-- ...
-
-## Files To Edit
-- ...
-
-## Constraints
-- ...
-
-## Non Goals
-- ...
-
-## Verification
-- ...
-
-## Expected Report
-- Changed files
-- Summary
-- Verification results
-- Blocked checks
-- Design questions for Codex
-```
-
-## Codex Review Checklist
-After Claude Code returns, review:
-- Did the diff stay inside the handoff?
-- Did any file outside `Files To Edit` change? If yes, was it necessary?
-- Did the implementation preserve stated constraints and non-goals?
-- Did it introduce dependencies, build tooling, packaging, CI/CD, deployment changes, or external exposure changes unexpectedly?
-- Did it touch secrets, credentials, `.env`, local settings, or runtime data?
-- Did verification run, and are blocked checks explained?
-- Does any discovery need to become a new `AGENTS.md` or `docs/*.md` decision?
-
-## Knowledge Persistence
-- Use `AGENTS.md` for durable workflow and design decisions.
-- Use `docs/*.md` for reusable technical notes, architecture details, procedures, and project-specific knowledge.
-- Before meaningful work, check relevant existing docs.
-- Do not silently encode durable design decisions only in code.
-
-## Design Record Scope
-Keep `AGENTS.md` focused on short, durable rules that future Codex and Claude Code sessions must follow.
-
-Do not add `Alternatives Considered` as a default Decision Log heading. When rejected options or longer background matter, summarize only the durable rule in `AGENTS.md` and put the detail under `docs/decisions/`.
-## Decision Log
-
-### 2026-06-22: Reverse integration — expose read-only stream status, no secretary-bot/OBS integration
-
-Context:
-- The push-notification coupling to `secretary-bot` is no longer desired. This
-  project should remain usable as an independent Twitch bot and dashboard.
-
-Decision:
-- `iniwa-twitch-bot` exposes a generic, read-only current-stream status API
-  (`GET /api/stream/status`) that reports only worker-held state and performs no
-  Twitch API call per request and no external service call.
-- This project does not call, configure, display state from, or otherwise
-  integrate with `secretary-bot`, and contains no OBS recording integration.
-  `secretary-bot` polls the status API and independently owns all OBS archive
-  recording, file organization, encoding, previews, and retention.
-- VOD download (manual, bulk, cancel, delete, history sync, and post-stream
-  auto-download) is an independent built-in feature controlled solely by
-  `enable_vod_download` (default off). No OBS/administrator-mode gating.
-
-Reason:
-- This project already owns Twitch stream state; reversing the direction to a
-  pull model removes cross-project coupling and lets each side own its domain.
-
-Constraints Introduced:
-- `GET /api/stream/status` must stay read-only and never trigger a Twitch API
-  call or contact `secretary-bot`.
-- Keep VOD download independently configurable and default off.
-
-Do Not Change Casually:
-- Do not re-add secretary-bot notification, OBS archive settings/status display,
-  connection tests, administrator-mode gating, or VOD-to-OBS migration.
-- Detail: `docs/decisions/2026-06-01-twitch-obs-archive-recording.md` (superseded
-  integration direction) and
-  `D:/Git/secretary-bot/docs/decisions/2026-06-22-twitch-stream-status-pull.md`.
-
-### 2026-06-01: Twitch detects streams, secretary-bot owns OBS archive recording
-
-> Superseded by the 2026-06-22 decision above. The push-notification direction
-> is retired; the OBS archive ownership rules remain valid as secretary-bot-owned
-> behavior.
-
-Context:
-- Local streaming now records with OBS in parallel, so Twitch VOD download is no longer the normal archive source.
-
-Decision:
-- `iniwa-twitch-bot` detects Twitch start/end and notifies `secretary-bot`; `secretary-bot` and Windows Agent control OBS recording and archive media.
-- Detailed implementation decisions live in `docs/decisions/2026-06-01-twitch-obs-archive-recording.md`.
-
-Reason:
-- This project already owns Twitch stream state, while `secretary-bot` owns OBS Recording Library, Windows Agent delegation, encode, preview, and retention.
-
-Constraints Introduced:
-- On Twitch stream end, request OBS recording stop if OBS is recording, even if it was already recording before the integration event.
-- Keep Twitch VOD download as administrator/fallback functionality; do not remove it.
-- Do not add direct OBS WebSocket or recording file move ownership to this project.
-
-Do Not Change Casually:
-- Do not make Twitch VOD download the default local archive path again without a new design review.
-- Do not bypass `secretary-bot` for OBS archive recording management.
-
-### YYYY-MM-DD: Decision title
-
-Context:
-- What problem or requirement caused this decision?
-
-Decision:
-- What did we decide?
-
-Reason:
-- Why is this the right tradeoff now?
-
-Constraints Introduced:
-- What should future implementation preserve?
-
-Do Not Change Casually:
-- What would cause design drift if changed without review?
+- Keep `AGENTS.md` limited to short, current, durable rules and links.
+- Put detailed decisions, evidence, rejected options, and rollout history in `docs/decisions/`.
+- Move a decision to `docs/decisions/archive/` only after it is fully implemented and no longer needed as current guidance.
+- Keep active or blocked handoffs in `docs/handoffs/` and completed handoffs in `docs/handoffs/archive/`.
+- Put reusable procedures and architecture details in the appropriate `docs/` location.
+- Do not rewrite completed handoffs or archived decisions merely to match a newer shared policy.

@@ -1,68 +1,80 @@
 # CLAUDE.md
 
-## Project Overview
-- Purpose: Twitch bot and management dashboard for streaming operations on Raspberry Pi Docker.
-- Runtime target: Raspberry Pi Docker linux/arm64
-- Stack: Python, Flask, Twitch API, Docker
+## Purpose
 
-## Coding Style
-- Write lightweight, efficient code. Prefer minimal dependencies.
-- Follow existing project patterns before adding new abstractions.
+This file contains Claude Code execution rules for `iniwa-twitch-bot`. `AGENTS.md` owns design intent, delegation policy, and Codex review.
 
-## Codex / Claude Code Workflow
-- This `CLAUDE.md` is for Claude Code execution rules.
-- Codex handoffs should normally be saved under `docs/handoffs/`; when a handoff file path is provided, read it before editing.
-- If the project also has `AGENTS.md`, treat it as the Codex-side source of design intent, handoff rules, and review criteria.
-- When the user provides a Codex handoff, follow that handoff first, then this file, then local project conventions.
-- If the task is ambiguous, requires changing documented design intent, or needs files outside the handoff, stop and ask before editing.
-- Do not commit automatically unless explicitly requested.
-- Report changed files, summary, verification results, blocked checks, and any design questions that should return to Codex.
+## Read Before Editing
 
-## Model / Subagent Policy
-- Use Opus as the primary Claude Code coordinator by default.
-- Opus owns context reading, requirement interpretation, planning, design-sensitive judgment, and final review.
-- Use Sonnet subagents for scoped implementation work, mechanical edits, localized refactors, code/log inspection, and verification when the task is clear enough to delegate.
-- Give each Sonnet subagent a narrow goal, explicit file scope, constraints, non-goals, and expected report.
-- Sonnet subagents must not change documented design intent, expand scope, add dependencies, alter build/deploy/external exposure, touch secrets, or make architectural decisions without returning to Opus.
-- For small edits, Opus may implement directly rather than creating unnecessary subagent overhead.
-- If subagents or the intended model split are unavailable, continue with the available model and report that limitation.
+Read:
 
-## Environment
-- Primary environment: Raspberry Pi Docker / linux/arm64
-- Working in `D:/Git/` means Home Sub PC.
-- Working in `C:/Git/` means Home Main PC.
-- Working in `C:/Users/**/Documents/git/` means Remote PC with limited environment.
-- Raspberry Pi is accessible via `ssh iniwapi` for reading code/logs.
-- Preserve Docker and arm64 deployment behavior unless explicitly requested.
+- `AGENTS.md`.
+- The supplied handoff, when present.
+- `README.md` and every file listed for inspection.
+- Relevant active records under `docs/`.
+- Build and deployment files only when the approved task includes them.
 
-## Important Files
-- README.md
-- app.py
-- config.py
-- requirements.txt
-- Dockerfile
-- compose.yaml
-- docs/
+## Project Facts
+
+- Python 3.12 Flask application served by gunicorn.
+- Jinja2 templates and browser JavaScript provide the management dashboard.
+- Twitch state, viewer data, analytics, rules, predictions, presets, and VOD workflows are handled by existing routes and services.
+- yt-dlp and ffmpeg support the independent Twitch VOD download feature.
+- The primary runtime is a Raspberry Pi-compatible `linux/arm64` Docker container.
+
+## Execution Rules
+
+- Implement and report only the current independently verifiable slice.
+- A handoff defines task scope but does not override durable constraints in `AGENTS.md`.
+- If the listed files are insufficient to reach the first scoped edit, stop and report the missing discovery or proposed split instead of broadening the task.
+- Return unresolved requirements and design choices to Codex.
+- Stop before adding a dependency or changing build tooling, packaging, CI/CD, deployment, image names, ports, host networking, storage, domains, or external exposure unless the task explicitly includes it.
+- Subagents are optional and limited to clearly parallel mechanical work within the same files, scope, and constraints.
+- Preserve unrelated user and other-agent changes. Treat unexpected diffs as having unknown authorship and exclude them from the current task.
+- Do not commit, push, publish an image, or deploy unless explicitly requested.
+
+## Implementation Constraints
+
+- Keep `GET /api/stream/status` read-only and based only on actual Twitch state already held by the worker.
+- Do not make a Twitch API request or external-service call while serving that endpoint.
+- Do not add secretary-bot notifications, OBS control, OBS archive UI or settings, administrator-mode VOD gating, or VOD-to-OBS migration.
+- Preserve the independent VOD workflows and keep automatic VOD download controlled only by `enable_vod_download`, defaulting off.
+- Follow existing Flask blueprint, service, storage, threading, logging, template, and browser-script patterns.
+- Preserve Raspberry Pi and `linux/arm64` compatibility.
+- Prefer small, readable changes and minimal dependencies.
+
+## Protected Files and State
+
+Do not edit, delete, or inspect contents unless explicitly required:
+
+- Twitch credentials, access tokens, IDs, `.env` files, and local runtime configuration.
+- `data/`, `data.db`, viewer and stream-history data, downloaded media, and VOD working files.
+- Production mounts, Portainer state, container runtime state, and generated heavy artifacts.
+- Deployment workflow, GHCR image settings, host networking, ports, and external exposure outside an approved deployment task.
+
+Tests must use temporary or mocked state and must not contact Twitch, secretary-bot, OBS, or another external service.
 
 ## Verification
-- Run the checks listed in the Codex handoff.
-- If verification cannot be run, report the reason.
 
-## Reporting
-- Changed files
-- Summary
-- Verification results
-- Blocked checks
-- Design questions for Codex
+Run the smallest relevant checks:
 
-## Tooling
-- Use **Serena MCP** tools for code navigation and editing to maximize efficiency (symbol search, overview, replace, insert, etc.)
-- Use **Tavily MCP** tools for web search and research:
-  - `tavily_search` — General web search for documentation, error messages, library usage, etc.
-  - `tavily_crawl` — Crawl a specific website for detailed information
-  - `tavily_extract` — Extract structured content from a URL
-  - `tavily_research` — In-depth research on a topic (use for complex or multi-faceted questions)
+- Documentation-only changes: `git diff --check` and a focused reference scan.
+- Python changes: compile the touched files explicitly with `python -m py_compile <files>`.
+- Focused behavior: run the directly affected pytest files or test functions.
+- Broader code changes: `python -m pytest tests/ -q`.
+- Stream-status changes should include the focused status tests and prove that no request-time Twitch call occurs.
+- VOD boundary changes should include the focused route and worker snapshot tests.
+- Docker or compose checks are required only when those files are in the approved scope; do not deploy as verification.
 
-## Knowledge Persistence
-Durable project workflow decisions belong in AGENTS.md. Surface implementation discoveries that should guide future sessions so Codex can decide whether to record them.
-Detailed design history belongs in `docs/decisions/`. Keep `AGENTS.md` focused on short, durable rules; do not add `Alternatives Considered` as a default Decision Log heading there.
+If a dependency or runtime environment is unavailable, report the blocked check and reason.
+
+## Report
+
+Report:
+
+- Changed files.
+- Concise summary.
+- Verification commands and results.
+- Blocked checks.
+- Subagent usage.
+- Design questions for Codex.
