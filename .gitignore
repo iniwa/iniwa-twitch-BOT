@@ -8,3 +8,4 @@ CLAUDE_ja.md
 .claude/
 .env
 .env.*
+/data.db

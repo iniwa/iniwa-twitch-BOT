@@ -92,7 +92,7 @@ def get_rules_status():
 def get_history_api_data():
     conf = c.load_config()
     db = c.load_viewers()
-    active_uids = set(c.current_session_viewers.keys())
+    active_uids = set(c.get_current_session_viewers().keys())
     ignored_ids, ignored_logins = _get_ignored_filters(conf)
 
     data_list = []
@@ -145,7 +145,7 @@ def get_active_viewers_data():
     ignored_ids, ignored_logins = _get_ignored_filters(conf)
 
     active_viewers = []
-    for uid, info in c.current_session_viewers.items():
+    for uid, info in c.get_current_session_viewers().items():
         if uid in ignored_ids:
             continue
         if info.get('login', '').lower() in ignored_logins:
@@ -175,7 +175,7 @@ def index():
     db = c.load_viewers()
     active_viewers = get_active_viewers_data()
     ignored_ids, ignored_logins = _get_ignored_filters(conf)
-    active_uids = set(c.current_session_viewers.keys())
+    active_uids = set(c.get_current_session_viewers().keys())
     filtered_history = {
         k: v for k, v in db.items()
         if k not in ignored_ids and v.get('login', '').lower() not in ignored_logins
@@ -215,11 +215,13 @@ def index():
 @bp.route('/api/status')
 def api_status():
     conf = c.load_config()
+    active_viewers = get_active_viewers_data()
+    viewer_count = len(active_viewers)
     return jsonify({
         'logs': c.logs,
-        'viewers': get_active_viewers_data(),
-        'count': len(c.current_session_viewers),
-        'viewer_count': len(c.current_session_viewers),
+        'viewers': active_viewers,
+        'count': viewer_count,
+        'viewer_count': viewer_count,
         'is_live': c.current_stream_id is not None,
         'current_game': c.current_game or '',
         'current_title': conf.get('current_title', ''),

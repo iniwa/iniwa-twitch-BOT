@@ -25,6 +25,7 @@ def save_rules():
         except (ValueError, TypeError):
             return redirect(url_for('dashboard.index'))
     c.save_config(conf)
+    c.reset_rule_execution_state()
     return redirect(url_for('dashboard.index'))
 
 
@@ -38,6 +39,7 @@ def move_rule(idx, direction):
         rules[idx], rules[idx + 1] = rules[idx + 1], rules[idx]
     conf['rules'] = rules
     c.save_config(conf)
+    c.reset_rule_execution_state()
     return redirect(url_for('dashboard.index'))
 
 
@@ -70,4 +72,5 @@ def delete_rule(idx):
     if 0 <= idx < len(rules):
         rules.pop(idx)
         c.save_config(conf)
+        c.reset_rule_execution_state()
     return redirect(url_for('dashboard.index'))

@@ -26,14 +26,14 @@ def download_vod_manual(stream_id):
     if not _validate_stream_id(stream_id):
         return redirect(url_for('analytics.analytics_list'))
     conf = c.load_config()
-    threading.Thread(target=execute_download, args=(conf, stream_id)).start()
+    threading.Thread(target=execute_download, args=(conf, stream_id), daemon=True).start()
     return redirect(url_for('analytics.analytics_list'))
 
 
 @bp.route('/download_all_vods', methods=['POST'])
 def download_all_vods():
     conf = c.load_config()
-    threading.Thread(target=bulk_download_task, args=(conf,)).start()
+    threading.Thread(target=bulk_download_task, args=(conf,), daemon=True).start()
     return redirect(url_for('analytics.analytics_list'))
 
 
@@ -62,14 +62,15 @@ def update_stream_info():
     if not _validate_stream_id(stream_id):
         return redirect(url_for('analytics.analytics_list'))
 
-    idx = load_stream_index()
-    if stream_id in idx:
-        if new_title:
-            idx[stream_id]['title'] = new_title
-        if new_game:
-            idx[stream_id]['game_name'] = new_game
-        save_stream_index(idx)
-        c.log(f"[EDIT] 配信情報を手動更新しました: {stream_id}")
+    with c.file_lock:
+        idx = load_stream_index()
+        if stream_id in idx:
+            if new_title:
+                idx[stream_id]['title'] = new_title
+            if new_game:
+                idx[stream_id]['game_name'] = new_game
+            save_stream_index(idx)
+            c.log(f"[EDIT] Stream info manually updated: {stream_id}")
 
     return redirect(url_for('analytics.analytics_list'))
 

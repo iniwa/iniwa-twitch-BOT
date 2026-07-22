@@ -4,7 +4,7 @@ import json
 import os
 import re
 import config as c
-from services.storage import ARCHIVE_WAIT_DIR, ARCHIVE_ENCODE_DIR
+from services.storage import ARCHIVE_WAIT_DIR, ARCHIVE_ENCODE_DIR, load_stream_index
 
 bp = Blueprint('analytics', __name__)
 
@@ -16,50 +16,45 @@ def _validate_stream_id(stream_id):
 
 @bp.route('/analytics')
 def analytics_list():
-    index_file = 'data/history/stream_index.json'
-    index_data = {}
+    index_data = load_stream_index()
     sorted_list = []
 
-    if os.path.exists(index_file):
-        try:
-            with c.file_lock:
-                with open(index_file, 'r', encoding='utf-8') as f:
-                    index_data = json.load(f)
-
-            for sid, data in index_data.items():
-                data['sid'] = sid
-                if data.get('vod_status') == 'downloaded' and data.get('file_path'):
-                    fp = data['file_path']
-                    fname = os.path.basename(fp)
-                    encode_path = os.path.join(ARCHIVE_ENCODE_DIR, fname)
-                    wait_path = os.path.join(ARCHIVE_WAIT_DIR, fname)
-                    if os.path.exists(encode_path):
-                        data['encode_status'] = 'encoded'
-                        data['archive_file_size'] = os.path.getsize(encode_path)
-                    elif os.path.exists(wait_path):
-                        data['encode_status'] = 'waiting'
-                        data['archive_file_size'] = os.path.getsize(wait_path)
-                    elif os.path.exists(fp):
-                        data['encode_status'] = 'waiting'
-                        data['archive_file_size'] = os.path.getsize(fp)
-                    else:
-                        data['encode_status'] = 'missing'
-                        data['archive_file_size'] = 0
-
-                if data.get('start_time'):
-                    dt_jst = c.parse_iso_jst(data['start_time'])
-                    if dt_jst:
-                        data['start_time'] = dt_jst.isoformat()
-
-                dur = data.get('duration', '')
-                if dur and 'm' in dur and 's' in dur:
-                    data['duration_short'] = re.sub(r'\d+s$', '', dur)
+    try:
+        for sid, data in index_data.items():
+            data['sid'] = sid
+            if data.get('vod_status') == 'downloaded' and data.get('file_path'):
+                fp = data['file_path']
+                fname = os.path.basename(fp)
+                encode_path = os.path.join(ARCHIVE_ENCODE_DIR, fname)
+                wait_path = os.path.join(ARCHIVE_WAIT_DIR, fname)
+                if os.path.exists(encode_path):
+                    data['encode_status'] = 'encoded'
+                    data['archive_file_size'] = os.path.getsize(encode_path)
+                elif os.path.exists(wait_path):
+                    data['encode_status'] = 'waiting'
+                    data['archive_file_size'] = os.path.getsize(wait_path)
+                elif os.path.exists(fp):
+                    data['encode_status'] = 'waiting'
+                    data['archive_file_size'] = os.path.getsize(fp)
                 else:
-                    data['duration_short'] = dur
-                sorted_list.append(data)
-            sorted_list.sort(key=lambda x: x.get('start_time', ''), reverse=True)
-        except (json.JSONDecodeError, OSError):
-            pass
+                    data['encode_status'] = 'missing'
+                    data['archive_file_size'] = 0
+
+            if data.get('start_time'):
+                dt_jst = c.parse_iso_jst(data['start_time'])
+                if dt_jst:
+                    data['start_time'] = dt_jst.isoformat()
+
+            dur = data.get('duration', '')
+            if dur and 'm' in dur and 's' in dur:
+                data['duration_short'] = re.sub(r'\d+s$', '', dur)
+            else:
+                data['duration_short'] = dur
+            sorted_list.append(data)
+        sorted_list.sort(key=lambda x: x.get('start_time', ''), reverse=True)
+    except (TypeError, AttributeError):
+        index_data = {}
+        sorted_list = []
 
     viewers = c.load_viewers()
     daily_changes = {}
@@ -120,17 +115,10 @@ def analytics_detail(stream_id):
         return render_template('analytics_detail.html', view='detail',
                              stream_info={"title": "不正なID", "start_time": None},
                              has_log_file=False)
-    index_file = 'data/history/stream_index.json'
-    stream_info = {"title": "不明", "start_time": None}
-    if os.path.exists(index_file):
-        try:
-            with c.file_lock:
-                with open(index_file, 'r', encoding='utf-8') as f:
-                    stream_info = json.load(f).get(stream_id, stream_info)
-        except (json.JSONDecodeError, OSError):
-            pass
+    stream_info = {"title": "??", "start_time": None}
+    stream_info = load_stream_index().get(stream_id, stream_info)
 
-    log_file = f"data/history/stream_{stream_id}.jsonl"
+    log_file = os.path.join(c.HISTORY_DIR, f"stream_{stream_id}.jsonl")
     chart_labels, chart_viewers, chart_comments = [], [], []
     chat_logs, total_emote_counts, unique_chatters = [], {}, set()
     event_logs = []

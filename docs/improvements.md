@@ -1,143 +1,90 @@
-# コードベース改善チェックリスト
+# プログラム改善チェックリスト
 
-> Gemini 産コードを Claude Code でレビューした結果に基づく改善案。
-> チェックを付けた項目から順次実装していく。
+コードベースを調査して洗い出した改善候補の一覧。
 
----
+**運用方法**: 着手したい項目にチェック `[x]` を入れる → Codex が handoff
+(`docs/handoffs/`) を作成し、Claude Code (auto モード) が実装する。
+handoff を挟むまでもない小粒な項目は Claude Code に直接依頼してもよい。
+実装完了した項目は「完了アーカイブ」へ移動する。
 
-## 1. セキュリティ (Security)
-
-### 1-1. 認証・認可
-
-- [ ] **全 POST エンドポイントに認証チェックを追加** — 現在すべてのルート (`routes/*.py`) に認証がなく、誰でも設定変更・bot 制御が可能
-- [ ] **CSRF トークン保護の導入** — Flask-WTF 等で POST リクエストを保護する
-
-*これはそれぞれの環境のローカル下で動作させるBOTのため、認証は不要かと思います。*  
-*また、Cloudflared Tunnel時点で認証を挟んでいるため、セキュリティリスクも軽微と考えています。*  
-
-### 1-2. XSS 対策
-
-- [x] **dashboard.js: `updateMonitor()` 内で `escHtml()` を全箇所に適用** — `rule.message` 等がエスケープされておらず XSS 可能
-- [x] **analytics.js: ゲーム名等の `innerHTML +=` をエスケープ処理** — API レスポンスがそのまま HTML に挿入される
-- [x] **テンプレート内 JS 関数呼び出しを `data-*` 属性方式に統一** — `onclick="func('{{ value }}')"` パターンの手動エスケープ (`replace("'", "\\'")`) は不完全。対象: `_viewer_card.html`, `_preset_card.html`, `dashboard.html`, `analytics_list.html`
-
-### 1-3. パストラバーサル
-
-- [x] **analytics.py / vod.py: `stream_id` のバリデーション追加** — `stream_id` がファイルパスに直接使用されており、`../` を含む入力でディレクトリトラバーサル可能
-
-### 1-4. 入力バリデーション
-
-- [x] **routes 全体: フォーム入力の型チェック・長さチェックを追加** — `int()` 変換時の `ValueError` ハンドリング、文字列長さ制限が未実装。対象: `rules.py`, `predictions.py`, `presets.py`, `viewers.py`, `settings.py`
-- [x] **settings.py: API トークンの形式バリデーション** — `client_id`, `access_token`, `broadcaster_token` の形式チェックなし
+- 機能追加・未検証項目はこのファイルの対象外 (`docs/issues.md` 等で管理)。
+- 優先度: **高** = 稼働中の安定性に直結 / **中** = 保守性・性能 / **低** = 任意。
 
 ---
 
-## 2. 安定性・エラーハンドリング (Reliability)
+## 1. 安定性 (常駐ワーカー・スレッド)
 
-### 2-1. アプリケーション起動
+## 2. 保守性・構造
 
-- [x] **app.py: 本番環境向け WSGI サーバー (gunicorn) の導入** — Flask 開発サーバーを直接使用しており、パフォーマンス・安定性に問題
-- [x] **app.py: 起動時のエラーハンドリング追加** — モジュール読み込み失敗時にプロセスが静かに終了する
+## 3. 性能・応答性
 
-### 2-2. エラーハンドリング統一
+- [ ] **【低】ダッシュボード表示時の同期 Twitch API 呼び出しを避ける**
+  - 現状: `routes/dashboard.py:200` (`index`) が `get_current_prediction`
+    を同期呼び出しし、Twitch API のタイムアウト (10 秒) までページ表示が
+    ブロックされ得る。`/api/current_settings` (`dashboard.py:270`) も同様。
+  - 対応案: 予想状態をワーカー側キャッシュまたはフロントの遅延フェッチ
+    (`/api/...` ポーリング) に寄せる。
+  - 制約: 予想カードの表示内容・操作フローを変えない。
 
-- [x] **routes 全体: エラーハンドリングパターンを統一** — 同じ処理 (`int()` 変換等) でも try-except がある箇所とない箇所が混在。特に `predictions.py`, `presets.py`
-- [x] **twitch_api.py: `update_channel_info()` のレスポンスステータスコード確認** — PATCH 後の成功チェックがない
-- [x] **predictions.py: `get_current_prediction()` の例外黙殺を修正** — リトライなし・ログなしで失敗が隠れる
+## 4. テスト
 
-### 2-3. スレッド安全性
+- [ ] **【中】中核フローのテストカバレッジを引き上げる**
+  - 現状: カバレッジ全体 23% (2026-07-07 計測、pytest-cov)。特に
+    `services/irc.py` 6%、`services/twitch_api.py` 9%、
+    `services/download.py` 12%、`services/storage.py` 15%。
+    テストは 12 件 (flask 導入環境で全パス)。
+  - 対応案: 純関数に近い箇所から追加する — `parse_tags` /
+    `handle_privmsg` / `handle_usernotice` (irc.py)、
+    `fix_dangling_states` / `sanitize_filename` (storage.py)、
+    `_find_video_url` (download.py、requests はモック)。
+  - 制約: 計測ツール (pytest-cov) はローカル install のみ。
+    requirements.txt / CI には追加しない。
 
-- [x] **workers.py: `current_minute_stats` のディープコピー問題を修正** — `raids` リストが浅いコピーで共有参照になっており、複数スレッドの `.append()` で競合
-- [x] **irc.py / workers.py: ロック取得順序を統一** — `stats_lock` と `file_lock` の取得順序が不一致でデッドロックの可能性
-- [x] **download.py: `load_stream_index()` → `save_stream_index()` 間の競合対策** — アトミックでない読み書きで状態不整合のリスク
+## 5. 見送り (現方針では対応しない)
 
-### 2-4. グレースフルシャットダウン
-
-- [x] **workers.py: daemon スレッドのグレースフルシャットダウン実装** — 3 スレッドすべて `daemon=True` で、シャットダウン時にデータ損失の可能性
-
----
-
-## 3. パフォーマンス (Performance)
-
-### 3-1. I/O 最適化
-
-- [x] **irc.py: 毎メッセージごとの `load_viewers()` / `save_viewers()` を改善** — チャットメッセージ毎にディスク I/O が発生。インメモリキャッシュ + 定期フラッシュに変更すべき
-- [x] **twitch_api.py: `force_update_followers()` のファイルロック長時間保持を改善** — ロック中にファイル I/O 完了まで他処理がブロックされる
-
-### 3-2. フロントエンド
-
-- [x] **analytics.js: `innerHTML +=` ループを `DocumentFragment` に変更** — 毎回リフロー・リペイントが発生しパフォーマンス低下
-- [x] **analytics.js: 重複関数 (`renderSimpleList` / `renderMonthlyList` / `renderWeeklyList`) を統一** — ほぼ同一のコードが 3 箇所に存在
-- [x] **dashboard.js: ポーリングを `setTimeout` チェーンに変更** — `setInterval` では前回 fetch 未完了時にリクエストが溜まる
-
-### 3-3. API 効率
-
-- [x] **twitch_api.py: `get_chatters()` にページネーション上限を設定** — `while True` で無制限。大規模チャンネルで問題
-- [x] **twitch_api.py: API タイムアウト値を統一** — 5〜15 秒でバラバラ。定数として一元管理すべき
+- [ ] **【低】全 POST エンドポイントへの認証・CSRF 保護**
+  - ローカルネットワーク専用 + Cloudflare Tunnel 側で認証済みのため
+    不要と判断 (利用者メモ)。外部公開形態が変わる場合は再評価する。
 
 ---
 
-## 4. インフラ・ビルド (Infrastructure)
+## 完了アーカイブ
 
-### 4-1. Docker
+### 2026-07-07: Codex implementation batch
 
-- [x] **Dockerfile: Python バージョンを 3.12-slim に更新** — Python 3.9 はセキュリティ更新が終了済み
-- [x] **Dockerfile: HEALTHCHECK 命令を追加** — コンテナの自動復旧が機能しない
-- [x] **Dockerfile: ユーザー ID を ARG で可変化** — `1000:1000` のハードコーディングを解消
+- [done] `shutdown_workers()` wired for process exit and VOD route thread daemon flags made consistent.
+  Verification: `python -m py_compile app.py routes\vod.py services\workers.py`; `python -m pytest tests/test_vod_routes.py tests/test_workers_snapshot.py -q` (5 passed, 1 skipped).
+- [done] `current_session_viewers` dictionary iteration race fixed.
+  Verification: `python -m pytest tests/test_session_viewers.py tests/test_stream_status.py -q` (1 passed, 2 skipped; Flask unavailable tests skipped).
+- [done] viewers.json / stream_index.json read-modify-write lock update.
+  Verification: `python -m py_compile config.py routes\dashboard.py routes\vod.py services\twitch_api.py services\workers.py services\download.py`; `python -m pytest tests/test_workers_snapshot.py tests/test_vod_routes.py tests/test_session_viewers.py -q` (5 passed, 2 skipped).
+- [done] Offline `current_minute_stats` accumulation fixed.
+  Verification: `python -m py_compile services\workers.py tests\test_workers_snapshot.py`; `python -m pytest tests/test_workers_snapshot.py -q` (5 passed).
+- [done] Rule execution state index drift fixed.
+  Verification: `python -m py_compile config.py routes\rules.py tests\test_rules_state.py`; `python -m pytest tests/test_rules_state.py -q` (1 passed).
+- [done] `data.db` removed from Git tracking while preserving the local file.
+  Verification: `git ls-files data.db` returned no tracked file; `Get-ChildItem data.db` confirmed the local file remains.
+- [done] `data/history/...` relative paths unified through `config.HISTORY_DIR` / `config.STREAM_INDEX_FILE`.
+  Verification: `python -m py_compile config.py services\storage.py services\workers.py routes\analytics.py tests\test_paths.py`; `python -m pytest tests/test_paths.py -q` (2 passed).
+- [done] `analytics.py` stream_index direct reads unified through `services.storage.load_stream_index()`.
+  Verification: `python -m py_compile routes\analytics.py`; `rg` confirmed no direct stream_index file open remains in `routes/analytics.py`.
 
-### 4-2. 依存関係
+### 2026-06 以前: Gemini 産コードレビュー起点の改善 (旧チェックリストから移行)
 
-- [x] **requirements.txt: バージョンピンニングを実装** — `flask`, `requests`, `yt-dlp` のバージョン未固定。予期しない破壊的変更のリスク
+検証: 旧形式のため個別記録なし。コミット範囲: `6e1e907` 前後まで。
 
-### 4-3. ビルド設定
-
-- [x] **.dockerignore: `.git`, `.github` 等の除外を追加** — 不要ファイルがイメージに含まれている
-- [x] **.gitignore: `.env` ファイルの除外を追加** — 機密情報の誤コミット防止
-
----
-
-## 5. コード品質 (Code Quality)
-
-### 5-1. コード重複
-
-- [x] **dashboard.py: 「無視対象ユーザー」フィルタリングを共通関数に抽出** — 3 箇所 (`get_history_api_data`, `get_active_viewers_data`, `index`) で同一ロジックが重複
-- [x] **filters.py: datetime パース処理の統一** — `to_datetime()` と `format_date()` で重複、dashboard.py の `_timestamp_to_date()` とも重複
-
-### 5-2. 設定のハードコード
-
-- [x] **app.py: ポート番号を環境変数から取得** — `8501` がハードコード
-- [x] **config.py: 相対パスを絶対パスまたは環境変数に変更** — `'data/config.json'` 等が作業ディレクトリ依存
-- [x] **download.py: スリープ間隔 (`time.sleep(300)`) を設定化** — 5 分固定
-- [x] **workers.py: オフライン猶予・ログフラッシュ間隔を設定化** — マジックナンバーが散在
-
-### 5-3. ログ
-
-- [x] **全体: ログメッセージから絵文字を除去、構造化ログに移行** — Gemini 由来の絵文字付きログ (`✅`, `⚠️`, `ℹ️`) がログ解析を困難にしている
-
-### 5-4. フロントエンド構造
-
-- [x] **JS: グローバル関数をモジュール化** — `common.js`, `dashboard.js` でグローバル名前空間を汚染
-- [x] **CSS: カラー変数を統一** — `.btn-*` クラスの色定義が分散。CSS カスタムプロパティで一元管理すべき
-
----
-
-## 6. UX・アクセシビリティ (UX / A11y)
-
-- [x] **base.html: ライブバッジに `aria-live="polite"` を追加**
-- [x] **analytics_list.html: クリック可能な `<td>` を `<a>` タグに変更** — キーボードナビゲーション非対応
-- [x] **prediction_card.html: プログレスバーにテキストラベルを追加** — 色のみで情報を表現しており色覚異常対応不足
-- [x] **analytics.css: カレンダーのモバイル対応** — `min-width: 800px` 固定で小画面で横スクロール発生
-
----
-
-## 優先度ガイド
-
-| 優先度 | カテゴリ | 目安 |
-|--------|----------|------|
-| **P0** | セキュリティ 1-2, 1-3 | XSS・パストラバーサルは即対応 |
-| **P1** | セキュリティ 1-4, 安定性 2-3 | 入力バリデーション・スレッド安全性 |
-| **P2** | インフラ 4-1, 4-2 | Python更新・バージョンピン |
-| **P3** | パフォーマンス 3-1, 3-2 | I/O最適化・フロントエンド改善 |
-| **P4** | コード品質 5-1〜5-4, UX 6 | リファクタリング・改善 |
-
-> **注**: 認証 (1-1) はアーキテクチャレベルの大きな変更。ローカルネットワーク専用なら優先度を下げてもよいが、外部公開 (Cloudflare Tunnel) する場合は P0。
+- ✅ XSS 対策 → `escHtml()` 適用・`data-*` 属性方式へ統一
+- ✅ パストラバーサル対策 → `stream_id` バリデーション (`_validate_stream_id`)
+- ✅ 入力バリデーション → routes 全体の型・長さチェック、トークン形式チェック
+- ✅ gunicorn 導入・起動時エラーハンドリング (`app.py`)
+- ✅ エラーハンドリング統一 (predictions / presets / twitch_api)
+- ✅ スレッド安全性 → `raids` ディープコピー、ロック順序、index 読み書き競合の主要部
+- ✅ グレースフルシャットダウン → `_shutdown_event` 導入 (※配線は §2 に残項目あり)
+- ✅ I/O 最適化 → IRC 視聴者更新のバッチ化、フォロワー同期のロック時間短縮
+- ✅ フロントエンド → `DocumentFragment` 化、重複レンダラー統一、`setTimeout` チェーン化
+- ✅ API 効率 → ページネーション上限 (`MAX_PAGINATION_PAGES`)、`API_TIMEOUT` 定数化
+- ✅ Docker → python:3.12-slim、HEALTHCHECK、UID/GID の ARG 化
+- ✅ 依存 → requirements.txt バージョンピン、.dockerignore / .gitignore 整備
+- ✅ コード品質 → 無視ユーザーフィルタ共通化、datetime パース統一、ポート/パス/間隔の設定化、絵文字ログ除去
+- ✅ フロント構造 → JS モジュール化、CSS カラー変数統一
+- ✅ UX/A11y → aria-live、`<a>` 化、プログレスバーのテキストラベル、カレンダーのモバイル対応

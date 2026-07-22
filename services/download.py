@@ -43,25 +43,25 @@ def request_cancel_download(stream_id):
 
 
 def delete_vod_file(stream_id):
-    idx = load_stream_index()
-    if stream_id not in idx:
-        return False
+    with c.file_lock:
+        idx = load_stream_index()
+        if stream_id not in idx:
+            return False
 
-    path = idx[stream_id].get('file_path')
-    if path and os.path.exists(path):
-        try:
-            os.remove(path)
-            c.log(f'[DEL] ファイルを削除しました: {path}')
-        except OSError as e:
-            c.log(f'[WARN] ファイル削除失敗 (手動確認してください): {path} - {e}')
-    else:
-        c.log('[INFO] 削除対象のファイルが見つかりませんでしたが、ステータスをリセットします。')
+        path = idx[stream_id].get('file_path')
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+                c.log(f'[DEL] File deleted: {path}')
+            except OSError as e:
+                c.log(f'[WARN] File delete failed, please check manually: {path} - {e}')
+        else:
+            c.log('[INFO] File not found; resetting VOD status.')
 
-    idx[stream_id]['vod_status'] = 'not_downloaded'
-    idx[stream_id].pop('file_path', None)
-    save_stream_index(idx)
+        idx[stream_id]['vod_status'] = 'not_downloaded'
+        idx[stream_id].pop('file_path', None)
+        save_stream_index(idx)
     return True
-
 
 def _find_video_url(conf, stream_id, idx_data):
     """VOD URLとIDを検索して返す"""

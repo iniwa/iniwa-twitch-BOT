@@ -54,7 +54,7 @@ def _reset_minute_stats():
 def flush_logs(conf, stream_data, chatters):
     ensure_directories()
     stream_id = stream_data['id']
-    filename = f'data/history/stream_{stream_id}.jsonl'
+    filename = os.path.join(c.HISTORY_DIR, f'stream_{stream_id}.jsonl')
 
     db = c.load_viewers()
     census = []
@@ -97,27 +97,28 @@ def flush_logs(conf, stream_data, chatters):
     with open(filename, 'a', encoding='utf-8') as f:
         f.write(json.dumps(snapshot, ensure_ascii=False) + '\n')
 
-    idx = load_stream_index()
-    if stream_id not in idx:
-        idx[stream_id] = {
-            'start_time': stream_data.get('started_at'),
-            'title': stream_data.get('title'),
-            'game_name': stream_data.get('game_name'),
-            'max_viewers': 0, 'avg_viewers_sum': 0, 'log_count': 0,
-            'vod_status': 'not_downloaded', 'source': 'bot'
-        }
+    with c.file_lock:
+        idx = load_stream_index()
+        if stream_id not in idx:
+            idx[stream_id] = {
+                'start_time': stream_data.get('started_at'),
+                'title': stream_data.get('title'),
+                'game_name': stream_data.get('game_name'),
+                'max_viewers': 0, 'avg_viewers_sum': 0, 'log_count': 0,
+                'vod_status': 'not_downloaded', 'source': 'bot'
+            }
 
-    item = idx[stream_id]
-    viewer_count = stream_data.get('viewer_count', 0)
-    item['max_viewers'] = max(item.get('max_viewers', 0), viewer_count)
-    item['avg_viewers_sum'] = item.get('avg_viewers_sum', 0) + viewer_count
-    item['log_count'] = item.get('log_count', 0) + 1
-    item['source'] = 'bot'
-    item['avg_viewers'] = round(item['avg_viewers_sum'] / item['log_count'], 1)
-    item['title'] = stream_data.get('title')
-    item['game_name'] = stream_data.get('game_name')
-    item['follower_count'] = current_minute_stats.get('follower_total', 0)
-    save_stream_index(idx)
+        item = idx[stream_id]
+        viewer_count = stream_data.get('viewer_count', 0)
+        item['max_viewers'] = max(item.get('max_viewers', 0), viewer_count)
+        item['avg_viewers_sum'] = item.get('avg_viewers_sum', 0) + viewer_count
+        item['log_count'] = item.get('log_count', 0) + 1
+        item['source'] = 'bot'
+        item['avg_viewers'] = round(item['avg_viewers_sum'] / item['log_count'], 1)
+        item['title'] = stream_data.get('title')
+        item['game_name'] = stream_data.get('game_name')
+        item['follower_count'] = current_minute_stats.get('follower_total', 0)
+        save_stream_index(idx)
 
 
 def get_debug_status():
@@ -131,7 +132,7 @@ def get_debug_status():
             ),
             'buffered_messages': len(current_minute_stats['messages']),
             'current_follower_count': current_minute_stats['follower_total'],
-            'log_path_exists': os.path.exists('data/history'),
+            'log_path_exists': os.path.exists(c.HISTORY_DIR),
             'yt_dlp_installed': YT_DLP_AVAILABLE,
             'download_dir': DOWNLOAD_DIR
         }
@@ -141,23 +142,24 @@ def _handle_stream_end(conf, finished_id):
     """配信終了時の処理"""
     c.log('[END] 配信終了検知')
 
-    idx = load_stream_index()
-    entry = idx.get(finished_id, {}) if idx else {}
-    if finished_id in idx:
-        st_str = entry.get('start_time')
-        if st_str:
-            start_dt = c.parse_iso_jst(st_str)
-            if start_dt:
-                try:
-                    end_dt = c.get_now()
-                    duration_sec = (end_dt - start_dt).total_seconds()
-                    entry['duration'] = get_formatted_duration(duration_sec)
-                    save_stream_index(idx)
-                    c.log(f'[TIME] 配信時間確定: {entry["duration"]}')
-                except Exception as e:
-                    c.log(f'[WARN] 時間計算エラー: {e}')
-            else:
-                c.log('[WARN] 時間計算エラー: start_time の解析に失敗')
+    with c.file_lock:
+        idx = load_stream_index()
+        entry = idx.get(finished_id, {}) if idx else {}
+        if finished_id in idx:
+            st_str = entry.get('start_time')
+            if st_str:
+                start_dt = c.parse_iso_jst(st_str)
+                if start_dt:
+                    try:
+                        end_dt = c.get_now()
+                        duration_sec = (end_dt - start_dt).total_seconds()
+                        entry['duration'] = get_formatted_duration(duration_sec)
+                        save_stream_index(idx)
+                        c.log(f'[TIME] Stream duration finalized: {entry["duration"]}')
+                    except Exception as e:
+                        c.log(f'[WARN] Duration calculation error: {e}')
+                else:
+                    c.log('[WARN] Duration calculation error: failed to parse start_time')
 
     if conf.get('enable_vod_download'):
         threading.Thread(
@@ -251,6 +253,8 @@ def viewer_worker_loop(conf):
             if not conf.get('is_running'):
                 # Bot 停止中は外部ステータスを古いライブ状態のまま残さない。
                 c.clear_current_stream()
+                with stats_lock:
+                    _reset_minute_stats()
                 time.sleep(10)
                 continue
 
@@ -299,6 +303,9 @@ def viewer_worker_loop(conf):
             if not is_live:
                 if c.current_stream_id is not None:
                     _handle_stream_end(conf, c.current_stream_id)
+                else:
+                    with stats_lock:
+                        _reset_minute_stats()
                 time.sleep(VIEWER_POLL_INTERVAL)
                 continue
 
@@ -310,19 +317,20 @@ def viewer_worker_loop(conf):
                 c.state.reset()
                 c.log(f'[START] 配信開始検知: {stream_data.get("title")} ({c.current_game})')
 
-                idx = load_stream_index()
-                if stream_id not in idx:
-                    idx[stream_id] = {
-                        'start_time': stream_data.get('started_at'),
-                        'title': stream_data.get('title'),
-                        'game_name': stream_data.get('game_name'),
-                        'max_viewers': 0, 'avg_viewers_sum': 0, 'log_count': 0,
-                        'source': 'bot', 'vod_status': 'not_downloaded',
-                        'thumbnail_url': stream_data.get('thumbnail_url', '').replace(
-                            '{width}', '%{width}'
-                        ).replace('{height}', '%{height}')
-                    }
-                save_stream_index(idx)
+                with c.file_lock:
+                    idx = load_stream_index()
+                    if stream_id not in idx:
+                        idx[stream_id] = {
+                            'start_time': stream_data.get('started_at'),
+                            'title': stream_data.get('title'),
+                            'game_name': stream_data.get('game_name'),
+                            'max_viewers': 0, 'avg_viewers_sum': 0, 'log_count': 0,
+                            'source': 'bot', 'vod_status': 'not_downloaded',
+                            'thumbnail_url': stream_data.get('thumbnail_url', '').replace(
+                                '{width}', '%{width}'
+                            ).replace('{height}', '%{height}')
+                        }
+                    save_stream_index(idx)
             else:
                 c.current_game = stream_data.get('game_name')
 

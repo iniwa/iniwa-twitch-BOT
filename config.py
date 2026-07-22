@@ -5,8 +5,10 @@ from datetime import datetime, timedelta, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
+HISTORY_DIR = os.path.join(DATA_DIR, 'history')
 CONFIG_FILE = os.path.join(DATA_DIR, 'config.json')
 VIEWERS_FILE = os.path.join(DATA_DIR, 'viewers.json')
+STREAM_INDEX_FILE = os.path.join(HISTORY_DIR, 'stream_index.json')
 
 MAX_LOGS = 50
 MAX_EVENTS = 200
@@ -22,6 +24,14 @@ _log_lock = threading.Lock()
 rule_last_executed = {}
 rule_last_comment_count = {}
 current_session_viewers = {}
+
+
+def reset_rule_execution_state():
+    """Clear index-based rule execution state after rule edits."""
+    rule_last_executed.clear()
+    rule_last_comment_count.clear()
+
+
 current_stream_id = None
 current_game = None
 
@@ -33,6 +43,15 @@ download_lock = threading.Lock()
 # 外部消費者向けの read-only ステータス API がこの状態を報告する。
 _stream_lock = threading.Lock()
 current_stream_snapshot = None
+
+
+def get_current_session_viewers():
+    """現在セッション視聴者のスナップショットを返す。"""
+    with file_lock:
+        return {
+            uid: dict(info)
+            for uid, info in current_session_viewers.items()
+        }
 
 
 def set_current_stream(snapshot: dict) -> None:

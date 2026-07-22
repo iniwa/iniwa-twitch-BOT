@@ -93,7 +93,7 @@ VOD ダウンロードは本プロジェクト内蔵の独立機能です。外�
 
 | 項目 | 技術 |
 |------|------|
-| バックエンド | Python 3.9 / Flask |
+| バックエンド | Python 3.12 / Flask / gunicorn |
 | フロントエンド | Jinja2 / Vanilla JS / CSS |
 | チャット接続 | Twitch IRC (SSL ソケット) |
 | API | Twitch Helix API |
@@ -176,13 +176,32 @@ static/
   css/                  #   スタイルシート
   js/                   #   クライアント JS (ポーリング・UI)
   img/                  #   favicon 等
+tests/                  #   pytest テスト
+docs/
+  decisions/            #   設計決定の記録
+  handoffs/             #   Codex → Claude Code の作業指示
+  improvements.md       #   改善チェックリスト
 data/                   #   永続化データ (実行時に生成)
   config.json           #     設定
   viewers.json          #     視聴者データ
-  stream_index.json     #     配信履歴インデックス
-  history/              #     配信ごとの分間統計 (.jsonl)
+  history/
+    stream_index.json   #     配信履歴インデックス
+    stream_*.jsonl      #     配信ごとの分間統計
 downloads/              #   VOD 保存先 (compose でマウント)
+  wait/                 #     ダウンロード直後の置き場
+  encode/               #     エンコード済み (外部ツールが配置)
 ```
+
+## 開発ワークフロー
+
+- 設計判断と作業指示 (handoff) は Codex が `docs/handoffs/` に作成し、
+  `claude -p --model sonnet --effort medium --permission-mode auto` で委譲した Claude Code
+  (Sonnet) が実装・検証する。実行ルールは `CLAUDE.md`、
+  Codex 側の合意事項は `AGENTS.md` を参照。
+- 改善候補は `docs/improvements.md` のチェックリストで管理する
+  (機能追加のアイデアは対象外)。
+- 検証: `python -m pytest tests/ -q` (flask / requests が必要。未導入の
+  環境では該当テストがスキップされる)。
 
 ## デプロイ
 

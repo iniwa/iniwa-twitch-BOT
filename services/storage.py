@@ -9,14 +9,14 @@ ARCHIVE_ENCODE_DIR = '/app/downloads/encode'
 
 
 def ensure_directories():
-    os.makedirs('data/history', exist_ok=True)
+    os.makedirs(c.HISTORY_DIR, exist_ok=True)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     os.makedirs(ARCHIVE_WAIT_DIR, exist_ok=True)
     os.makedirs(ARCHIVE_ENCODE_DIR, exist_ok=True)
 
 
 def load_stream_index():
-    path = 'data/history/stream_index.json'
+    path = c.STREAM_INDEX_FILE
     if not os.path.exists(path):
         return {}
     with c.file_lock:
@@ -30,7 +30,7 @@ def load_stream_index():
 def save_stream_index(data):
     ensure_directories()
     with c.file_lock:
-        with open('data/history/stream_index.json', 'w', encoding='utf-8') as f:
+        with open(c.STREAM_INDEX_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -131,7 +131,7 @@ def delete_history_data(stream_id):
         else:
             c.log('[INFO] インデックス情報は見つかりませんでした')
 
-    log_path = f'data/history/stream_{stream_id}.jsonl'
+    log_path = os.path.join(c.HISTORY_DIR, f'stream_{stream_id}.jsonl')
     if os.path.exists(log_path):
         try:
             os.remove(log_path)

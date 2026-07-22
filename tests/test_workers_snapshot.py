@@ -127,3 +127,29 @@ def test_debug_stream_not_published_externally(monkeypatch):
         c.clear_current_stream()
         c.current_stream_id = None
         c.current_game = None
+
+
+def test_minute_stats_reset_while_running_offline(monkeypatch):
+    monkeypatch.setattr(workers, 'check_stream_status_and_update',
+                        lambda conf: (False, None, False))
+    c.current_stream_id = None
+
+    with workers.stats_lock:
+        workers.current_minute_stats['messages'] = [{'text': 'offline chat'}]
+        workers.current_minute_stats['events'] = [{'type': 'bits'}]
+        workers.current_minute_stats['bits'] = 100
+        workers.current_minute_stats['follower_total'] = 42
+        workers.current_minute_stats['last_irc_activity'] = 12345
+
+    try:
+        _run_loop_once(monkeypatch, {'is_running': True, 'ignore_stream_status': False})
+        with workers.stats_lock:
+            assert workers.current_minute_stats['messages'] == []
+            assert workers.current_minute_stats['events'] == []
+            assert workers.current_minute_stats['bits'] == 0
+            assert workers.current_minute_stats['follower_total'] == 42
+            assert workers.current_minute_stats['last_irc_activity'] == 12345
+    finally:
+        with workers.stats_lock:
+            workers._reset_minute_stats()
+        c.current_stream_id = None

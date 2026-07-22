@@ -1,9 +1,10 @@
 import os
+import atexit
 import logging
 from flask import Flask
 from routes import register_blueprints
 from routes.filters import register_filters
-from services.workers import start_workers
+from services.workers import start_workers, shutdown_workers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,6 +19,7 @@ register_blueprints(app)
 
 try:
     start_workers()
+    atexit.register(shutdown_workers)
 except Exception as e:
     logger.error(f'Worker startup failed: {e}')
     raise

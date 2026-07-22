@@ -57,23 +57,24 @@ def check_stream_status_and_update(conf):
 
     if stream_data:
         if c.current_stream_id == stream_data['id']:
-            idx = load_stream_index()
-            if c.current_stream_id in idx:
-                updated = False
-                if idx[c.current_stream_id].get('title') != stream_data['title']:
-                    idx[c.current_stream_id]['title'] = stream_data['title']
-                    updated = True
-                if idx[c.current_stream_id].get('game_name') != stream_data['game_name']:
-                    idx[c.current_stream_id]['game_name'] = stream_data['game_name']
-                    updated = True
-                thumb = stream_data.get('thumbnail_url', '').replace(
-                    '{width}', '%{width}'
-                ).replace('{height}', '%{height}')
-                if thumb and idx[c.current_stream_id].get('thumbnail_url') != thumb:
-                    idx[c.current_stream_id]['thumbnail_url'] = thumb
-                    updated = True
-                if updated:
-                    save_stream_index(idx)
+            with c.file_lock:
+                idx = load_stream_index()
+                if c.current_stream_id in idx:
+                    updated = False
+                    if idx[c.current_stream_id].get('title') != stream_data['title']:
+                        idx[c.current_stream_id]['title'] = stream_data['title']
+                        updated = True
+                    if idx[c.current_stream_id].get('game_name') != stream_data['game_name']:
+                        idx[c.current_stream_id]['game_name'] = stream_data['game_name']
+                        updated = True
+                    thumb = stream_data.get('thumbnail_url', '').replace(
+                        '{width}', '%{width}'
+                    ).replace('{height}', '%{height}')
+                    if thumb and idx[c.current_stream_id].get('thumbnail_url') != thumb:
+                        idx[c.current_stream_id]['thumbnail_url'] = thumb
+                        updated = True
+                    if updated:
+                        save_stream_index(idx)
         return True, stream_data, False
     else:
         return False, None, False
@@ -251,46 +252,47 @@ def force_update_followers(conf):
                 break
             time.sleep(0.2)
 
-        db = c.load_viewers()
         updated_count = 0
         today_str = c.get_now().strftime('%Y-%m-%d')
 
-        for uid, api_data in all_followers_map.items():
-            if uid not in db:
-                db[uid] = {
-                    "name": api_data['name'], "login": api_data['login'],
-                    "is_follower": True, "followed_at": api_data['followed_at'],
-                    "unfollowed_at": ""
-                }
-                updated_count += 1
-                c.log_event({
-                    "type": "follow", "user": api_data['name'],
-                    "followed_at": api_data['followed_at']
-                })
-            else:
-                ud = db[uid]
-                if not ud.get("is_follower"):
+        with c.file_lock:
+            db = c.load_viewers()
+            for uid, api_data in all_followers_map.items():
+                if uid not in db:
+                    db[uid] = {
+                        "name": api_data['name'], "login": api_data['login'],
+                        "is_follower": True, "followed_at": api_data['followed_at'],
+                        "unfollowed_at": ""
+                    }
+                    updated_count += 1
                     c.log_event({
-                        "type": "follow", "user": ud.get("name", api_data['name']),
+                        "type": "follow", "user": api_data['name'],
                         "followed_at": api_data['followed_at']
                     })
-                if (not ud.get("is_follower")
-                        or ud.get("followed_at") != api_data['followed_at']
-                        or ud.get("unfollowed_at")):
-                    ud["is_follower"] = True
-                    ud["followed_at"] = api_data['followed_at']
-                    ud["unfollowed_at"] = ""
+                else:
+                    ud = db[uid]
+                    if not ud.get("is_follower"):
+                        c.log_event({
+                            "type": "follow", "user": ud.get("name", api_data['name']),
+                            "followed_at": api_data['followed_at']
+                        })
+                    if (not ud.get("is_follower")
+                            or ud.get("followed_at") != api_data['followed_at']
+                            or ud.get("unfollowed_at")):
+                        ud["is_follower"] = True
+                        ud["followed_at"] = api_data['followed_at']
+                        ud["unfollowed_at"] = ""
+                        updated_count += 1
+
+            for uid, user_data in db.items():
+                if user_data.get("is_follower") and uid not in all_followers_map:
+                    user_data["is_follower"] = False
+                    if not user_data.get("unfollowed_at"):
+                        user_data["unfollowed_at"] = today_str
                     updated_count += 1
 
-        for uid, user_data in db.items():
-            if user_data.get("is_follower") and uid not in all_followers_map:
-                user_data["is_follower"] = False
-                if not user_data.get("unfollowed_at"):
-                    user_data["unfollowed_at"] = today_str
-                updated_count += 1
-
-        if updated_count > 0:
-            c.save_viewers(db)
+            if updated_count > 0:
+                c.save_viewers(db)
 
         return f"同期完了: {len(all_followers_map)}人確認、{updated_count}件更新。"
     except Exception as e:
@@ -298,67 +300,70 @@ def force_update_followers(conf):
 
 
 def sync_vod_history(conf, force_update=False):
-    c.log("[SYNC] 過去の配信履歴(VOD)を同期中..." + (" (強制更新モード)" if force_update else ""))
+    c.log("[SYNC] Syncing VOD history..." + (" (force update)" if force_update else ""))
     try:
         url = f"https://api.twitch.tv/helix/videos?user_id={conf['broadcaster_id']}&type=archive&first=100"
         r = requests.get(url, headers=get_headers(conf), timeout=API_TIMEOUT)
         if r.status_code == 200:
             videos = r.json().get('data', [])
-            idx = load_stream_index()
             updated_count = 0
 
-            for v in videos:
-                sid = v.get('stream_id')
-                if not sid:
-                    continue
+            with c.file_lock:
+                idx = load_stream_index()
+                for v in videos:
+                    sid = v.get('stream_id')
+                    if not sid:
+                        continue
 
-                if sid not in idx or force_update:
-                    old_data = idx.get(sid, {})
-                    old_status = old_data.get("vod_status", "not_downloaded")
-                    old_path = old_data.get("file_path")
-                    old_log_count = old_data.get("log_count", 0)
-                    old_max = old_data.get("max_viewers", 0)
-                    old_avg_sum = old_data.get("avg_viewers_sum", 0)
-                    old_source = old_data.get("source", "api")
-                    old_follower_count = old_data.get("follower_count", 0)
+                    if sid not in idx or force_update:
+                        old_data = idx.get(sid, {})
+                        old_status = old_data.get("vod_status", "not_downloaded")
+                        old_path = old_data.get("file_path")
+                        old_log_count = old_data.get("log_count", 0)
+                        old_max = old_data.get("max_viewers", 0)
+                        old_avg_sum = old_data.get("avg_viewers_sum", 0)
+                        old_source = old_data.get("source", "api")
+                        old_follower_count = old_data.get("follower_count", 0)
 
-                    current_game_name = old_data.get("game_name", "Unknown")
+                        current_game_name = old_data.get("game_name", "Unknown")
 
-                    idx[sid] = {
-                        "start_time": v['created_at'],
-                        "title": v['title'],
-                        "game_name": current_game_name,
-                        "max_viewers": old_max,
-                        "avg_viewers_sum": old_avg_sum,
-                        "log_count": old_log_count,
-                        "avg_viewers": round(old_avg_sum / old_log_count, 1) if old_log_count > 0 else 0,
-                        "follower_count": old_follower_count,
-                        "source": old_source,
-                        "vod_status": old_status,
-                        "file_path": old_path,
-                        "vod_id": v['id'],
-                        "thumbnail_url": v['thumbnail_url'],
-                        "duration": v['duration'],
-                        "view_count": v['view_count']
-                    }
-                    if old_path:
-                        idx[sid]["file_path"] = old_path
-                    updated_count += 1
+                        idx[sid] = {
+                            "start_time": v['created_at'],
+                            "title": v['title'],
+                            "game_name": current_game_name,
+                            "max_viewers": old_max,
+                            "avg_viewers_sum": old_avg_sum,
+                            "log_count": old_log_count,
+                            "avg_viewers": round(old_avg_sum / old_log_count, 1) if old_log_count > 0 else 0,
+                            "follower_count": old_follower_count,
+                            "source": old_source,
+                            "vod_status": old_status,
+                            "file_path": old_path,
+                            "vod_id": v['id'],
+                            "thumbnail_url": v['thumbnail_url'],
+                            "duration": v['duration'],
+                            "view_count": v['view_count']
+                        }
+                        if old_path:
+                            idx[sid]["file_path"] = old_path
+                        updated_count += 1
 
-                elif "vod_id" not in idx[sid]:
-                    idx[sid].update({
-                        "vod_id": v['id'],
-                        "thumbnail_url": v['thumbnail_url'],
-                        "duration": v['duration'],
-                        "view_count": v['view_count']
-                    })
-                    updated_count += 1
+                    elif "vod_id" not in idx[sid]:
+                        idx[sid].update({
+                            "vod_id": v['id'],
+                            "thumbnail_url": v['thumbnail_url'],
+                            "duration": v['duration'],
+                            "view_count": v['view_count']
+                        })
+                        updated_count += 1
+
+                if updated_count > 0:
+                    save_stream_index(idx)
 
             if updated_count > 0:
-                save_stream_index(idx)
-                c.log(f"[OK] 配信履歴の同期完了: {updated_count}件を更新しました。")
+                c.log(f"[OK] VOD history sync complete: {updated_count} updated.")
             else:
-                c.log("[INFO] 更新が必要なデータはありませんでした。")
+                c.log("[INFO] No VOD history updates needed.")
 
     except Exception as e:
-        c.log(f"[WARN] 履歴同期エラー: {e}")
+        c.log(f"[WARN] VOD history sync error: {e}")
