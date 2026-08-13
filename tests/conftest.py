@@ -3,8 +3,11 @@ import sys
 
 import pytest
 
-# プロジェクトルートを import パスに追加
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# プロジェクトルートと、段階移行中の src パッケージを import パスに追加
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SRC = os.path.join(_ROOT, "src")
+sys.path.insert(0, _SRC)
+sys.path.insert(1, _ROOT)
 
 
 @pytest.fixture

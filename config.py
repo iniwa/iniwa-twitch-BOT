@@ -43,6 +43,7 @@ download_lock = threading.Lock()
 # 外部消費者向けの read-only ステータス API がこの状態を報告する。
 _stream_lock = threading.Lock()
 current_stream_snapshot = None
+_current_stream_observed_at = None
 
 
 def get_current_session_viewers():
@@ -54,24 +55,40 @@ def get_current_session_viewers():
         }
 
 
-def set_current_stream(snapshot: dict) -> None:
+def set_current_stream(snapshot: dict, observed_at=None) -> None:
     """ライブ観測時にワーカーが現在配信のスナップショットを保存する。"""
-    global current_stream_snapshot
+    global current_stream_snapshot, _current_stream_observed_at
     with _stream_lock:
         current_stream_snapshot = dict(snapshot)
+        _current_stream_observed_at = (
+            observed_at
+            or snapshot.get('observed_at')
+            or datetime.now(timezone.utc)
+        )
 
 
 def clear_current_stream() -> None:
     """配信終了時に現在配信のスナップショットをクリアする。"""
-    global current_stream_snapshot
+    global current_stream_snapshot, _current_stream_observed_at
     with _stream_lock:
         current_stream_snapshot = None
+        _current_stream_observed_at = datetime.now(timezone.utc)
 
 
 def get_current_stream():
     """現在配信のスナップショットのコピーを返す（なければ None）。"""
     with _stream_lock:
         return dict(current_stream_snapshot) if current_stream_snapshot else None
+
+
+def get_current_stream_observation():
+    """Return detached current stream data and its latest worker observation.
+
+    This intentionally reads only the lock-protected in-memory stream state.
+    """
+    with _stream_lock:
+        snapshot = dict(current_stream_snapshot) if current_stream_snapshot else None
+        return snapshot, _current_stream_observed_at
 
 # ダウンロード状態 (download_lock で保護)
 download_progress = {}

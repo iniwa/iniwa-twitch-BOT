@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Live Control Room（プレビュー）</title>
+  <link rel="stylesheet" href="{{ url_for('v2_live.static', filename='v2/live.css') }}">
+</head>
+<body>
+<a class="skip-link" href="#main">本文へ移動</a>
+<header class="shell-header"><div><p class="eyebrow">V2 CONTROL ROOM · PREVIEW</p><h1>Live Control Room</h1></div><span class="readonly">読み取り専用</span></header>
+<main id="main" tabindex="-1">
+  <p class="page-state" aria-current="page">ライブ状況</p>
+  <section class="panel primary" aria-labelledby="stream-heading">
+    <div class="panel-heading"><h2 id="stream-heading">配信状態</h2><span class="state state-{{ snapshot.stream.state }}">{{ {'live':'配信中','offline':'オフライン','degraded':'要確認','unavailable':'利用不可'}[snapshot.stream.state] }}</span></div>
+    <p class="freshness">観測時刻: <time datetime="{{ snapshot.stream.observed_at }}">{{ snapshot.stream.observed_at }}</time>{% if snapshot.stream.stale %} · データが古い可能性があります{% endif %}</p>
+    {% if snapshot.stream.state == 'unavailable' %}<p class="notice">配信データを利用できません。</p>{% elif snapshot.stream.state == 'offline' %}<p class="notice">現在、配信は行われていません。</p>{% else %}<dl class="details"><div><dt>タイトル</dt><dd>{{ snapshot.stream.title or '—' }}</dd></div><div><dt>ゲーム</dt><dd>{{ snapshot.stream.game or '—' }}</dd></div><div><dt>視聴者数</dt><dd class="numeric">{{ snapshot.stream.viewer_count if snapshot.stream.viewer_count is not none else '—' }}</dd></div></dl>{% endif %}
+  </section>
+  <section class="panel" aria-labelledby="health-heading"><h2 id="health-heading">コンポーネントの状態</h2><ul class="health-list"><li><span>配信接続</span><strong>{{ snapshot.connections.get('twitch', 'unavailable') }}</strong></li><li><span>ボット</span><strong>{{ {'running':'稼働中','stopped':'停止中','unavailable':'利用不可','action_required':'対応が必要'}[snapshot.bot.state] }}（{% if snapshot.bot.enabled is none %}不明{% elif snapshot.bot.enabled %}有効{% else %}無効{% endif %}）</strong></li></ul></section>
+</main>
+</body></html>
