@@ -1,6 +1,6 @@
 # v2 Live pilot: production rollout
 
-Status: active.
+Status: complete.
 
 ## Goal
 
@@ -85,3 +85,25 @@ The user explicitly authorized the production rollout on 2026-08-13.
   result, and non-sensitive remote health/HTTP status results.
 - State whether rollback was needed.  Confirm that production data,
   credentials, media, mounts, and deployment configuration were preserved.
+
+## Completion record
+
+- Published source commit: `d1bfefc` (`feat: add v2 rebuild foundation and
+  live pilot`).  It was pushed to both the GitHub publication repository and
+  the existing Gitea mirror.
+- The existing GitHub `Docker Build and Push` workflow completed successfully
+  for that revision and published its configured multi-architecture image.
+- On the Raspberry Pi, the new arm64 image was pulled and verified to carry
+  the same source revision.  The previous image remained present as the
+  rollback target during the rollout.
+- The current Compose definition was not byte-identical to Portainer's stale
+  recorded definition, so the operational settings were compared before
+  replacement: image name, service user, host network, restart policy, and
+  `/app/data` plus `/app/downloads` bind targets matched.  Only the
+  `twitch-bot` service was force-recreated with the already-pulled image;
+  no dependencies, Compose file, mounts, configuration, data, credentials,
+  or media were changed.
+- Post-rollout: container health is healthy; `/`, `/api/stream/status`,
+  `/v2/live`, `/api/v2/live`, `/api/v2/health`, and
+  `/v2-static/v2/live.css` all returned HTTP 200.  Response bodies were not
+  retained during remote validation.  Rollback was not needed.
