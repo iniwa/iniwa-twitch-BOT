@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file contains Claude Code execution rules for `iniwa-twitch-bot`. `AGENTS.md` owns design intent, delegation policy, and Codex review.
+This file is a compatibility boundary for readers that look for `CLAUDE.md`; `AGENTS.md` is authoritative for design, runtime-selected roles, delegation, and Codex review.
 
 ## Read Before Editing
 
