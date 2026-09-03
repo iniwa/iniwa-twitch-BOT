@@ -195,8 +195,7 @@ downloads/              #   VOD 保存先 (compose でマウント)
 ## 開発ワークフロー
 
 - 設計判断と作業指示 (handoff) は Codex が `docs/handoffs/` に作成し、
-  `claude -p --model sonnet --effort medium --permission-mode auto` で委譲した Claude Code
-  (Sonnet) が実装・検証する。実行ルールは `CLAUDE.md`、
+  Codex のネイティブ委譲（通常は `bounded_implementer`）で実装・検証する。実行ルールは `CLAUDE.md`、
   Codex 側の合意事項は `AGENTS.md` を参照。
 - 改善候補は `docs/improvements.md` のチェックリストで管理する
   (機能追加のアイデアは対象外)。

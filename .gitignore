@@ -9,3 +9,4 @@ CLAUDE_ja.md
 .env
 .env.*
 /data.db
+.venv-phase4b/
