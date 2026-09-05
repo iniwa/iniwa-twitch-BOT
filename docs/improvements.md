@@ -3,8 +3,8 @@
 コードベースを調査して洗い出した改善候補の一覧。
 
 **運用方法**: 着手したい項目にチェック `[x]` を入れる → Codex が handoff
-(`docs/handoffs/`) を作成し、Claude Code (auto モード) が実装する。
-handoff を挟むまでもない小粒な項目は Claude Code に直接依頼してもよい。
+(`docs/handoffs/`) を作成し、設定済みの Codex role が実装する。
+handoff を挟むまでもない小粒な項目は Codex の primary に直接依頼してもよい。
 実装完了した項目は「完了アーカイブ」へ移動する。
 
 - 機能追加・未検証項目はこのファイルの対象外 (`docs/issues.md` 等で管理)。
